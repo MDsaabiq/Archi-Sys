@@ -297,34 +297,14 @@ export const AZURE: Vendor = {
       note: 'Blob Storage is one product with several access tiers. Hot is the tier for data read often, which is what object storage usually means. Cool, Cold and Archive are the same blobs priced for data read rarely.',
     },
 
-    searchindex: {
-      product: 'Azure AI Search',
-      note: 'Formerly Azure Cognitive Search. Same service, renamed.',
-    },
-
-    timeseriesdb: {
-      product: 'Azure Data Explorer',
-      note: 'Azure Time Series Insights was retired and this is where its workload went. Data Explorer is built for timestamped append-heavy data and queries it with KQL.',
-    },
-
     graphdb: {
       product: 'Azure Cosmos DB for Apache Gremlin',
       note: 'Cosmos DB is one database with several APIs. Picking the Gremlin API at creation time is what makes an account a graph database.',
     },
 
-    coldstorage: {
-      product: 'Azure Blob Storage (Archive tier)',
-      note: 'The same blobs as object storage, in the tier priced for data almost never read. Reading from Archive means rehydrating first, which takes hours, so it behaves like a different product.',
-    },
-
     vectordb: {
       product: 'Azure AI Search',
       note: 'Azure has no standalone vector database. Vector search is a feature added to existing products: AI Search indexes vectors alongside text, Cosmos DB stores them next to documents. AI Search is the one built for retrieval.',
-    },
-
-    streambroker: {
-      product: 'Azure Event Hubs',
-      note: 'The partitioned append-only log, the same shape as Kafka. Event Hubs speaks the Kafka protocol, so Kafka clients connect unchanged.',
     },
 
     pubsub: {
@@ -360,21 +340,9 @@ export const AZURE: Vendor = {
       note: 'Which feature depends on the goal: active geo-replication for a readable copy in another region, or the read scale-out replica included in Business Critical and Hyperscale for spreading read load.',
     },
 
-    shard: {
-      product: 'Azure Cosmos DB physical partition',
-      note: 'Azure has no sharding product. Cosmos DB shards for you once you pick a partition key. For Azure SQL Database, sharding is something you build, with Elastic Database tools as a helper library.',
-    },
-
     edgecompute: {
       product: 'Azure Front Door rules engine',
       note: 'Azure has no real equivalent of Cloudflare Workers. The rules engine rewrites and routes at the point of presence but does not run arbitrary code. IoT Edge is unrelated: it runs containers on hardware you own.',
     },
-
-    // No `transcoder` entry. Azure Media Services was retired on 30 June
-    // 2024 and Microsoft directs customers to third-party partners for
-    // encoding rather than to any replacement Azure product. Omitting the
-    // kind makes the lookup fall back to the generic name, which is the
-    // honest answer. Naming some unrelated service here would not be.
-    // https://learn.microsoft.com/en-us/previous-versions/azure/media-services/latest/azure-media-services-retirement
   },
 };

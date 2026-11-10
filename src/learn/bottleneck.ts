@@ -52,10 +52,6 @@ const ERRORS_WORTH_NAMING = 0.01;
 const GATES: ReadonlySet<NodeKind> = new Set([
   'ratelimiter',
   'apigateway',
-  'loadshedder',
-  'breaker',
-  'sidecar',
-  'bulkhead',
 ]);
 
 /** Kinds that serve nothing, so cannot fill up. */
@@ -69,7 +65,7 @@ const NEVER_FULL: ReadonlySet<NodeKind> = new Set([
 ]);
 
 /** Kinds that hold work for someone else to read, so their depth is not their own load. */
-const BUFFERS: ReadonlySet<NodeKind> = new Set(['queue', 'streambroker', 'retryqueue']);
+const BUFFERS: ReadonlySet<NodeKind> = new Set(['queue']);
 
 /** Kinds whose slots are `capacity * instances` and can be counted in words. */
 const COUNTED_SLOTS: ReadonlySet<NodeKind> = new Set([
@@ -98,8 +94,6 @@ export interface Reading {
 function fillOf(node: SimNode, s: NodeStats): number {
   const util = clamp01(s.utilization);
   switch (node.kind) {
-    case 'shard':
-      return clamp01(s.maxShardUtilization);
     case 'replica':
       return Math.max(util, ...(s.perInstance ?? []));
     case 'lambda':
@@ -128,9 +122,7 @@ function refusedOf(node: SimNode, s: NodeStats): number {
   return (
     s.shedRate +
     (s.slowdownRate ?? 0) +
-    (node.kind === 'lambda' || node.kind === 'coldstorage'
-      ? (s.throttledRate ?? 0)
-      : 0) +
+    (node.kind === 'lambda' ? (s.throttledRate ?? 0) : 0) +
     (s.connectionRejectRate ?? 0) +
     (s.retentionDropRate ?? 0) +
     (s.flushFailRate ?? 0)
@@ -254,21 +246,6 @@ export function findBottleneck(topology: Topology, snapshot: SimSnapshot): Verdi
     };
   }
 
-  // A log losing messages: some reader is slower than the writers. The log
-  // cannot say which group, so it is the part named.
-  const log = readings
-    .filter(
-      (r) => r.node.kind === 'streambroker' && (r.s.retentionDropRate ?? 0) >= MIN_RATE,
-    )
-    .sort((a, b) => (b.s.retentionDropRate ?? 0) - (a.s.retentionDropRate ?? 0))[0];
-  if (log) {
-    return {
-      kind: 'problem',
-      nodeId: log.node.id,
-      text: `${log.node.label}: its slowest reader is ${formatCount(log.s.consumerLag ?? log.s.queued)} messages behind, and ${rate(log.s.retentionDropRate ?? 0)} a second expire before they are read.`,
-    };
-  }
-
   // 3. A caller giving up, or stuck waiting, on something that is merely slow.
   const stuck = readings
     .filter((r) => r.gaveUp >= MIN_RATE || (r.struggling && mostlyWaiting(r)))
@@ -345,8 +322,6 @@ export function stateClause(
       );
     } else if (slots !== null) {
       parts.push(`all ${formatCount(slots)} slots busy`);
-    } else if (r.node.kind === 'shard') {
-      parts.push(`its busiest partition is at ${formatPct(r.fill)}`);
     } else if (r.node.kind === 'lambda') {
       parts.push(
         `all ${formatCount(r.node.config.maxConcurrency ?? 0)} copies running`,
@@ -501,10 +476,7 @@ function gateRefusals(r: Reading): number {
   return (
     (s.throttledRate ?? 0) +
     (s.authRejectRate ?? 0) +
-    (s.lowSheddedRate ?? 0) +
-    (s.highSheddedRate ?? 0) +
-    (s.rejectedRate ?? 0) +
-    (s.bulkheadRejectedRate ?? 0)
+    (s.rejectedRate ?? 0)
   );
 }
 

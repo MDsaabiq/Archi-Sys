@@ -167,15 +167,6 @@ const FIELDS_BY_KIND: Record<NodeKind, Field[]> = {
     'queueLimit',
   ],
   // Partition count and per-shard slots set the ceiling; hotKeyFraction
-  // is the knob that destroys it.
-  shard: [
-    'shardCount',
-    'shardCapacity',
-    'hotKeyFraction',
-    'serviceMs',
-    'serviceCv',
-    'queueLimit',
-  ],
   // A controller has no request-path knobs at all: every field it exposes is
   // about the control loop it runs on the node it watches.
   autoscaler: [
@@ -196,8 +187,6 @@ const FIELDS_BY_KIND: Record<NodeKind, Field[]> = {
   // rate, and how much burst you forgive on top of it.
   ratelimiter: ['rateLimitRps', 'burst'],
   // The four knobs of a breaker are the four questions it answers: how bad,
-  // measured over how long, shut for how long, and reopened on what evidence.
-  breaker: ['errorThreshold', 'windowMs', 'openMs', 'halfOpenProbes'],
   // Blob storage: a high flat latency, a wide pool, and the per-prefix rate
   // ceiling that is the real limit long before the pool is.
   objectstore: [
@@ -209,28 +198,7 @@ const FIELDS_BY_KIND: Record<NodeKind, Field[]> = {
     'errorRate',
   ],
   // The search trade: cheap queries, surcharged writes, and the refresh lag
-  // that decides how stale a search can be.
-  searchindex: [
-    'readFraction',
-    'indexMs',
-    'indexLagMs',
-    'instances',
-    'capacity',
-    'serviceMs',
-    'serviceCv',
-    'queueLimit',
-  ],
   // Appends are the base cost; the two range-query knobs are what turn a
-  // metrics firehose into a melted store.
-  timeseriesdb: [
-    'rangeQueryFraction',
-    'rangeQueryMs',
-    'instances',
-    'capacity',
-    'serviceMs',
-    'serviceCv',
-    'queueLimit',
-  ],
   // One knob carries the lesson: every extra hop of depth multiplies cost.
   graphdb: [
     'traversalDepth',
@@ -241,8 +209,6 @@ const FIELDS_BY_KIND: Record<NodeKind, Field[]> = {
     'queueLimit',
   ],
   // The archive tier is deliberately knob-poor: seconds per request and few
-  // slots ARE the component.
-  coldstorage: ['capacity', 'serviceMs', 'serviceCv', 'queueLimit'],
   // Corpus size and recall target move query cost independently; the server
   // knobs underneath decide how much of that cost the pool can absorb.
   vectordb: [
@@ -255,8 +221,6 @@ const FIELDS_BY_KIND: Record<NodeKind, Field[]> = {
     'queueLimit',
   ],
   // Partition count is the parallelism ceiling of every consumer group;
-  // queueLimit is the log's retention in messages.
-  streambroker: ['partitions', 'queueLimit', 'serviceMs'],
   // A topic has no knobs of its own: amplification comes from the wiring,
   // and the ack cost is the only thing to tune.
   pubsub: ['serviceMs'],
@@ -275,17 +239,6 @@ const FIELDS_BY_KIND: Record<NodeKind, Field[]> = {
     'queueLimit',
   ],
   // The tax (serviceMs), and what it buys: retries with a per-attempt
-  // deadline, and outlier ejection.
-  sidecar: [
-    'outlierAfter',
-    'openMs',
-    'retries',
-    'timeoutMs',
-    'instances',
-    'capacity',
-    'serviceMs',
-    'queueLimit',
-  ],
   // No fleet knobs at all: the platform scales it. What you tune is the
   // cold-start economics and the concurrency ceiling.
   lambda: [
@@ -301,29 +254,8 @@ const FIELDS_BY_KIND: Record<NodeKind, Field[]> = {
   cron: ['intervalMs', 'batchSize'],
   // One knob, and it IS the component: how many calls may be outstanding
   // to the dependency behind it. errorRate and retries are deliberately
-  // not offered here; both would make the pool count drift.
-  bulkhead: ['bulkheadMax', 'bulkheadMode', 'acquireQueueMax', 'acquireTimeoutMs'],
   // Delivery concurrency, dispatch cost, buffer depth, and the redrive
-  // policy: attempts and the per-attempt deadline.
-  retryqueue: [
-    'retries',
-    'timeoutMs',
-    'instances',
-    'capacity',
-    'serviceMs',
-    'queueLimit',
-  ],
   // The encode farm: boxes, jobs per box, seconds per job, and the quality
-  // ladder each finished job hands downstream.
-  transcoder: [
-    'renditions',
-    'instances',
-    'capacity',
-    'serviceMs',
-    'serviceCv',
-    'errorRate',
-    'queueLimit',
-  ],
   // The share it can answer locally, and the CPU budget that decides how
   // much of that share it actually gets to keep.
   edgecompute: [
@@ -338,8 +270,6 @@ const FIELDS_BY_KIND: Record<NodeKind, Field[]> = {
   // here is the buffer (memory), not threads.
   writebehind: ['flushDelayMs', 'capacity', 'serviceMs', 'queueLimit'],
   // The limiter's bucket plus the two priority knobs that turn it from
-  // fair refusal into deliberate triage.
-  loadshedder: ['rateLimitRps', 'burst', 'lowPriorityShare', 'priorityReserve'],
 };
 
 /**
@@ -349,9 +279,6 @@ const FIELDS_BY_KIND: Record<NodeKind, Field[]> = {
  */
 const GATE_KINDS: ReadonlySet<NodeKind> = new Set<NodeKind>([
   'ratelimiter',
-  'breaker',
-  'loadshedder',
-  'bulkhead',
 ]);
 
 /** Kinds whose throughput ceiling is capacity x (1000 / serviceMs). */
@@ -364,15 +291,8 @@ const HAS_THROUGHPUT_CEILING: ReadonlySet<NodeKind> = new Set<NodeKind>([
   // Both serve on the engine's standard slot discipline with a flat mean
   // service time, so capacity x (1000 / serviceMs) is exact for them too.
   'objectstore',
-  'coldstorage',
-  // Same standard slot discipline: delivery slots for the retry queue,
-  // encode slots for the transcoder, PoP slots for edge compute.
-  'retryqueue',
-  'transcoder',
   'edgecompute',
-  // Both run the standard slot discipline too; they were simply missing.
   'apigateway',
-  'sidecar',
 ]);
 
 /**
@@ -395,8 +315,6 @@ const KIND_BLURB: Record<NodeKind, string> = {
     'Drains a queue at its own pace. Too few workers and the backlog never recovers.',
   replica:
     'Reads scale with the replica count, but a read can arrive before the last write has propagated. Watch the stale rate as you raise the lag.',
-  shard:
-    'Splits data across partitions by key, so capacity adds up, until one key gets hot and a single shard has to carry it alone.',
   autoscaler:
     'Watches one node and adds capacity when it runs hot. New capacity takes warmup time to arrive, so load always leads it.',
   region:
@@ -404,45 +322,25 @@ const KIND_BLURB: Record<NodeKind, string> = {
   cdn: 'An edge cache in front of everything. At a 0.9 hit rate one CDN leaves a tenth of the traffic for the origin, and that chance is rolled independently of every other cache on the path. It is still the cheapest capacity you will ever add.',
   ratelimiter:
     'A token bucket. Refuses excess traffic instantly instead of queueing it, which is what stops a busy system turning into a dead one.',
-  breaker:
-    'Watches its downstream and stops calling it once it is failing. Cutting the traffic to zero is what gives a struggling dependency room to recover.',
   objectstore:
     'Blob storage. Every request pays a high flat latency, but the pool is wide enough that saturating it takes deliberate effort. Not a database, and that is the point.',
-  searchindex:
-    'Searches are cheap; writes pay an indexing surcharge and only become searchable after the refresh lag. The stale-search rate is that lag made visible.',
-  timeseriesdb:
-    'Built to swallow appends by the thousand. A range query costs hundreds of appends, so a few percent of them dominates the store, which is why metrics do not live in your main database.',
   graphdb:
     'Stores relationships. Every extra hop of traversal depth multiplies the edges visited by three, so a friends-of-friends query costs triple and one more hop triples it again.',
-  coldstorage:
-    'The archive tier: cheap to keep, seconds to read. Fine for a trickle of restores behind a queue, hopeless for anything a user is waiting on.',
   vectordb:
     'Similarity search over embeddings. Cost grows with the log of the corpus and explodes as recall approaches perfect, so the recall slider is a latency slider read backwards.',
-  streambroker:
-    'A partitioned, replayable log. Producers are acked instantly; each outgoing edge is an independent consumer group whose lag grows when its consumers are slower than the producers. Partition count, not consumer count, caps how fast a group can drain.',
   pubsub:
     'One publish becomes one delivery per subscriber. A slow subscriber sheds at its own node without delaying the others, but the total load is multiplied by the fan-out, whether you noticed or not.',
   websocket:
     'Holds long-lived connections. Capacity is concurrent connections held, not requests per second: at 30 new connections a second held 8 seconds each, 240 slots are simply occupied. Chat systems run out of sockets long before they run out of CPU.',
   apigateway:
     'The front door: authenticates, rate limits, and routes each request to the backend its weights choose. Three components worth of refusals happen here so the backends only ever see traffic worth serving.',
-  sidecar:
-    'A proxy beside one service. It charges its service time on every single request, and pays you back with retries, a per-attempt deadline, and ejecting the upstream after repeated failures. Put one at every hop and watch the taxes stack; that is a service mesh.',
   lambda:
     'Scales instantly with load, up to its concurrency cap, and there is no queue past it. The catch is the cold start: a request that finds no warm instance pays a large extra latency, so idle periods and bursts are exactly when it is slowest.',
   cron: 'Fires on a schedule and dumps its whole batch at once. The database that handles the steady daytime load falls over at midnight not because traffic grew, but because this arrived all in the same instant.',
-  bulkhead:
-    'Caps how many calls may be outstanding to the dependency behind it. When that dependency slows down, the pool fills within one round trip and the excess fails fast here, instead of queueing behind a sick service.',
-  retryqueue:
-    'Acks the sender instantly, delivers downstream itself, and redelivers failures with backoff. Messages that fail every attempt land on the dead letter shelf: counted, not vanished.',
-  transcoder:
-    'A batch farm: jobs take seconds, so throughput is boxes times jobs-per-box divided by job time. Feed it from a queue, and size it against arrivals, because a structural deficit grows the backlog forever.',
   edgecompute:
     'A small function running in the PoP. The share of requests it can fully answer never touches your origin; the rest pass through. Unlike a CDN hit rate, that share is a property of your code, not your traffic.',
   writebehind:
     'Acknowledges writes from memory and flushes them to the store later. The caller sees a one-millisecond write; the store sees the same load smoothed. Crash it, and every write still in the buffer is lost after being confirmed.',
-  loadshedder:
-    'A token bucket that refuses by priority: low-priority traffic must leave a reserve untouched, so under saturation it is dropped first while the traffic that matters keeps being admitted. Degradation as a policy, not an accident.',
 };
 
 /* ------------------------------------------------------------------ *
@@ -1146,14 +1044,6 @@ const KIND_FIELD_OVERRIDES: Partial<
       hint: 'The buffer is memory: how many acknowledged writes may sit dirty at once. It is not a thread count.',
     },
   },
-  streambroker: {
-    queueLimit: {
-      term: 'retention',
-      label: 'Retention',
-      unit: 'messages kept, per partition',
-      hint: 'How far back the log keeps messages. A consumer group that falls further behind than this skips ahead, and the skipped messages are lost to it.',
-    },
-  },
   autoscaler: {
     minCapacity: { unit: 'instances' },
     maxCapacity: { unit: 'instances' },
@@ -1590,12 +1480,10 @@ function VitalsMeter({
     case 'autoscaler':
     case 'region':
     case 'pubsub':
-    case 'breaker':
       return null;
 
     // Token-bucket kinds: the bucket is the thing that drains.
     case 'ratelimiter':
-    case 'loadshedder':
     case 'apigateway': {
       const burst = cfg.burst ?? cfg.rateLimitRps ?? 1;
       const tokens = Math.max(0, stats.tokens ?? 0);
@@ -1612,49 +1500,6 @@ function VitalsMeter({
             </span>
           </div>
           <Meter value={fill} tone={tone} label="Tokens left" />
-        </div>
-      );
-    }
-
-    case 'bulkhead': {
-      const limit = stats.bulkheadLimit ?? 0;
-      const used = stats.bulkheadInFlight ?? 0;
-      const fill = limit > 0 ? Math.min(1, used / limit) : 0;
-      const rejecting = (stats.bulkheadRejectedRate ?? 0) > 0;
-      const timingOut = (stats.bulkheadAcquireTimeoutRate ?? 0) > 0;
-      const tone = rejecting || timingOut ? 'is-danger' : toneClass(healthOfLoad(fill));
-      return (
-        <div className="ins-util">
-          <div className="ins-util-head">
-            <span className="label">
-              <Term id="bulkhead">Pool in use</Term>
-            </span>
-            <span className={tone ? `num num-md ${tone}` : 'num num-md'}>
-              {formatCount(used)} / {formatCount(limit)}
-            </span>
-          </div>
-          <Meter value={fill} tone={tone} label="Pool in use" />
-        </div>
-      );
-    }
-
-    case 'streambroker': {
-      const lag = stats.consumerLag ?? 0;
-      const retention = stats.queueLimit > 0 ? stats.queueLimit : 1;
-      const fill = Math.min(1, lag / retention);
-      const losing = (stats.retentionDropRate ?? 0) > 0;
-      const tone = losing ? 'is-danger' : toneClass(healthOfLoad(fill));
-      return (
-        <div className="ins-util">
-          <div className="ins-util-head">
-            <span className="label">
-              <Term id="consumer-lag">Worst lag vs retention</Term>
-            </span>
-            <span className={tone ? `num num-md ${tone}` : 'num num-md'}>
-              {formatCount(lag)} / {formatCount(retention)}
-            </span>
-          </div>
-          <Meter value={fill} tone={tone} label="Consumer lag" />
         </div>
       );
     }
@@ -1816,7 +1661,7 @@ function RegionPanel({ stats }: { stats: NodeStats }) {
  */
 function KindStatRows({
   kind,
-  config,
+  config: _config,
   stats,
 }: {
   kind: NodeKind;
@@ -1861,94 +1706,6 @@ function KindStatRows({
         </>
       );
 
-    case 'breaker': {
-      const state = stats.breakerState ?? 'closed';
-      return (
-        <>
-          <StatRow
-            label="Circuit"
-            term="breaker"
-            value={
-              state === 'open'
-                ? 'OPEN, failing fast'
-                : state === 'half-open'
-                  ? 'probing'
-                  : 'closed'
-            }
-            tone={
-              state === 'open'
-                ? 'is-danger'
-                : state === 'half-open'
-                  ? 'is-warn'
-                  : undefined
-            }
-          />
-          <StatRow
-            label="Downstream errors, windowed"
-            value={formatPct(stats.breakerErrorRate)}
-            tone={toneClass(healthOfErr(stats.breakerErrorRate))}
-          />
-          {state === 'open' && (
-            <StatRow label="Probes again in" value={formatMs(stats.openRemainingMs)} />
-          )}
-          <StatRow
-            label="Failing fast"
-            value={formatRate(stats.rejectedRate)}
-            tone={(stats.rejectedRate ?? 0) > 0 ? 'is-danger' : undefined}
-          />
-          <StatRow
-            label="Times tripped"
-            term="breaker"
-            value={formatCount(stats.breakerTrips)}
-          />
-        </>
-      );
-    }
-
-    case 'sidecar': {
-      const state = stats.breakerState ?? 'closed';
-      return (
-        <>
-          <StatRow
-            label="Upstream"
-            value={
-              state === 'open'
-                ? 'EJECTED'
-                : state === 'half-open'
-                  ? 'probing'
-                  : 'proxying'
-            }
-            tone={
-              state === 'open'
-                ? 'is-danger'
-                : state === 'half-open'
-                  ? 'is-warn'
-                  : undefined
-            }
-          />
-          <StatRow
-            label="Upstream failures"
-            value={formatRate(stats.upstreamFailRate)}
-          />
-          <StatRow
-            label="Consecutive failures"
-            value={formatCount(stats.consecutiveFails)}
-            tone={(stats.consecutiveFails ?? 0) > 0 ? 'is-warn' : undefined}
-          />
-          <StatRow
-            label="Failing fast"
-            value={formatRate(stats.rejectedRate)}
-            tone={(stats.rejectedRate ?? 0) > 0 ? 'is-danger' : undefined}
-          />
-          <StatRow
-            label="Times ejected"
-            term="outlier-ejection"
-            value={formatCount(stats.breakerTrips)}
-          />
-        </>
-      );
-    }
-
     case 'websocket':
       return (
         <>
@@ -1977,24 +1734,6 @@ function KindStatRows({
             label="Throttled"
             value={formatRate(stats.throttledRate)}
             tone={(stats.throttledRate ?? 0) > 0 ? 'is-danger' : undefined}
-          />
-        </>
-      );
-
-    case 'streambroker':
-      return (
-        <>
-          <StatRow
-            label="Worst group lag"
-            term="consumer-lag"
-            value={formatCount(stats.consumerLag)}
-          />
-          <StatRow label="Delivering" value={formatRate(stats.deliveryRate)} />
-          <StatRow
-            label="Lost to retention"
-            term="retention"
-            value={formatRate(stats.retentionDropRate)}
-            tone={(stats.retentionDropRate ?? 0) > 0 ? 'is-danger' : undefined}
           />
         </>
       );
@@ -2060,54 +1799,6 @@ function KindStatRows({
         />
       );
 
-    case 'coldstorage':
-      return (
-        <>
-          <StatRow label="Restore jobs running" value={formatCount(stats.inFlight)} />
-          <StatRow
-            label="Refused, quota full"
-            term="throttled"
-            value={formatRate(stats.throttledRate)}
-            tone={(stats.throttledRate ?? 0) > 0 ? 'is-danger' : undefined}
-          />
-        </>
-      );
-
-    case 'transcoder':
-      return (
-        <StatRow
-          label="Renditions out"
-          term="rendition"
-          value={formatRate(stats.outputRate)}
-        />
-      );
-
-    case 'searchindex':
-      return (
-        <>
-          <StatRow
-            label="Stale searches"
-            term="stale-search"
-            value={formatPct(stats.staleSearchRate)}
-            tone={(stats.staleSearchRate ?? 0) > 0.2 ? 'is-warn' : undefined}
-          />
-          <StatRow label="Searches" value={formatRate(stats.searchRate)} />
-          <StatRow label="Index writes" value={formatRate(stats.indexWriteRate)} />
-        </>
-      );
-
-    case 'timeseriesdb':
-      return (
-        <>
-          <StatRow label="Appends" value={formatRate(stats.appendRate)} />
-          <StatRow
-            label="Range queries"
-            term="range-query"
-            value={formatRate(stats.rangeQueryRate)}
-          />
-        </>
-      );
-
     case 'graphdb':
       return (
         <StatRow
@@ -2124,68 +1815,6 @@ function KindStatRows({
           term="recall"
           value={formatMs(stats.queryCostMs)}
         />
-      );
-
-    case 'bulkhead':
-      return (
-        <>
-          <StatRow
-            label="Pool in use"
-            value={`${formatCount(stats.bulkheadInFlight ?? 0)} of ${formatCount(stats.bulkheadLimit ?? 0)}`}
-          />
-          <StatRow
-            label="Refused, pool full"
-            term="bulkhead-full"
-            value={formatRate(stats.bulkheadRejectedRate)}
-            tone={(stats.bulkheadRejectedRate ?? 0) > 0 ? 'is-danger' : undefined}
-          />
-          {config.bulkheadMode === 'wait' && (
-            <>
-              <StatRow
-                label="Waiting to acquire"
-                value={formatCount(stats.bulkheadWaiting ?? 0)}
-              />
-              <StatRow
-                label="Last acquire wait, measured"
-                value={
-                  stats.bulkheadAcquireLatencyMs === undefined
-                    ? NA
-                    : formatMs(stats.bulkheadAcquireLatencyMs)
-                }
-              />
-              <StatRow
-                label="Acquire timeouts"
-                value={formatRate(stats.bulkheadAcquireTimeoutRate)}
-                tone={
-                  (stats.bulkheadAcquireTimeoutRate ?? 0) > 0 ? 'is-danger' : undefined
-                }
-              />
-            </>
-          )}
-        </>
-      );
-
-    case 'retryqueue':
-      return (
-        <>
-          <StatRow label="Delivered" value={formatRate(stats.deliveredRate)} />
-          <StatRow
-            label="Redelivering"
-            value={formatRate(stats.redeliveryRate)}
-            tone={(stats.redeliveryRate ?? 0) > 0 ? 'is-warn' : undefined}
-          />
-          <StatRow
-            label="Dead-lettering"
-            value={formatRate(stats.deadLetterRate)}
-            tone={(stats.deadLetterRate ?? 0) > 0 ? 'is-danger' : undefined}
-          />
-          <StatRow
-            label="Dead letters, total"
-            term="dead-letter"
-            value={formatCount(stats.deadLetters)}
-            tone={(stats.deadLetters ?? 0) > 0 ? 'is-warn' : undefined}
-          />
-        </>
       );
 
     case 'writebehind':
@@ -2221,31 +1850,6 @@ function KindStatRows({
             term="cpu-budget"
             value={formatRate(stats.cpuExceededRate)}
             tone={(stats.cpuExceededRate ?? 0) > 0 ? 'is-warn' : undefined}
-          />
-        </>
-      );
-
-    case 'loadshedder':
-      return (
-        <>
-          <StatRow
-            label="High priority admitted"
-            value={formatRate(stats.highAdmittedRate)}
-          />
-          <StatRow
-            label="Low priority admitted"
-            value={formatRate(stats.lowAdmittedRate)}
-          />
-          <StatRow
-            label="Low priority dropped"
-            term="deprioritized"
-            value={formatRate(stats.lowSheddedRate)}
-            tone={(stats.lowSheddedRate ?? 0) > 0 ? 'is-warn' : undefined}
-          />
-          <StatRow
-            label="High priority dropped"
-            value={formatRate(stats.highSheddedRate)}
-            tone={(stats.highSheddedRate ?? 0) > 0 ? 'is-danger' : undefined}
           />
         </>
       );
@@ -2719,34 +2323,6 @@ function ReplicaSetSection({ per, stats }: { per: number[]; stats: NodeStats }) 
 function UnitsPanel({ node, stats }: { node: SimNode; stats: NodeStats }) {
   const per = stats.perInstance;
   if (!per || per.length === 0) return null;
-
-  if (node.kind === 'shard') {
-    const hot = stats.maxShardUtilization;
-    const cold = stats.minShardUtilization;
-    // A hot key is not "one shard is busier"; it is one shard pinned while
-    // the rest idle. The gap is the signature, so it is named as one.
-    const skewed = hot - cold > 0.5;
-    return (
-      <Section title="Across the partitions">
-        <div className="ins-stats">
-          <StatRow label="Partitions" term="shard" value={formatCount(per.length)} />
-          <StatRow
-            label="Busiest one"
-            value={formatPct(hot)}
-            tone={toneClass(healthOfLoad(hot))}
-          />
-          <StatRow label="Quietest one" value={formatPct(cold)} />
-          <StatRow label="Average" value={formatPct(stats.utilization)} />
-        </div>
-        {skewed && (
-          <p className="ins-hint is-warn">
-            Badly uneven. One partition is doing most of the work while the others sit
-            idle. Adding shards will not help until the keys spread out.
-          </p>
-        )}
-      </Section>
-    );
-  }
 
   if (node.kind === 'replica') return <ReplicaSetSection per={per} stats={stats} />;
 

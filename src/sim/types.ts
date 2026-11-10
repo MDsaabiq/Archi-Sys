@@ -10,28 +10,17 @@ export type NodeKind =
   | 'region'
   | 'cdn'
   | 'ratelimiter'
-  | 'breaker'
   | 'replica'
-  | 'shard'
   | 'objectstore'
-  | 'searchindex'
-  | 'timeseriesdb'
   | 'graphdb'
-  | 'coldstorage'
   | 'vectordb'
-  | 'streambroker'
   | 'pubsub'
   | 'websocket'
   | 'apigateway'
-  | 'sidecar'
   | 'lambda'
   | 'cron'
-  | 'bulkhead'
-  | 'retryqueue'
-  | 'transcoder'
   | 'edgecompute'
-  | 'writebehind'
-  | 'loadshedder';
+  | 'writebehind';
 
 /** Tunable knobs per node kind. Not every field applies to every kind. */
 export interface NodeConfig {

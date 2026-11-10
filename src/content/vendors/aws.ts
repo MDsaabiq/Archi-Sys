@@ -349,32 +349,13 @@ export const AWS: Vendor = {
       product: 'Amazon S3',
     },
 
-    searchindex: {
-      product: 'Amazon OpenSearch Service',
-    },
-
-    timeseriesdb: {
-      product: 'Amazon Timestream for InfluxDB',
-      note: 'Timestream now covers time series through managed InfluxDB, which is also the engine a student is most likely to have met.',
-    },
-
     graphdb: {
       product: 'Amazon Neptune',
-    },
-
-    coldstorage: {
-      product: 'Amazon S3 Glacier',
-      note: 'A storage class of S3 rather than a separate service, chosen because the retrieval delay is the thing being taught.',
     },
 
     vectordb: {
       product: 'Amazon OpenSearch Serverless (vector search collection)',
       note: 'AWS sells no standalone vector database. The nearest purpose-built thing is a vector search collection on OpenSearch Serverless, which is also what Bedrock knowledge bases default to.',
-    },
-
-    streambroker: {
-      product: 'Amazon Kinesis Data Streams',
-      note: 'Kinesis is the AWS-native one and shows the shard model plainly. Amazon MSK is the choice if the lesson depends on Kafka itself rather than on partitioned streaming.',
     },
 
     pubsub: {
@@ -411,19 +392,9 @@ export const AWS: Vendor = {
       note: 'Not a separate product. A replica is an RDS instance sized on its own, so the `db` sizes apply.',
     },
 
-    shard: {
-      product: 'Amazon RDS',
-      note: 'AWS sells no sharding product for RDS. A shard is one more independent RDS instance and the application decides what goes where, which is the point worth teaching.',
-    },
-
     edgecompute: {
       product: 'Amazon CloudFront Functions',
       note: 'Two options run at the edge. CloudFront Functions is the light one, for header and URL work at the point of presence; Lambda@Edge runs longer and costs more.',
-    },
-
-    transcoder: {
-      product: 'AWS Elemental MediaConvert',
-      note: 'The file-based transcoder, which is the batch "convert this upload" job. MediaLive is the live-stream counterpart. Elastic Transcoder is the previous generation.',
     },
   },
 };

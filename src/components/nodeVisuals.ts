@@ -46,34 +46,23 @@ import {
   Cog as icWorker,
   SquareFunction as icLambda,
   CloudLightning as icEdgecompute,
-  Film as icTranscoder,
   CalendarClock as icCron,
   /* Data */
   Database as icDb,
   DatabaseZap as icCache,
   DatabaseBackup as icReplica,
-  Columns3 as icShard,
   Package as icObjectstore,
-  TextSearch as icSearchindex,
-  ChartLine as icTimeseriesdb,
   Waypoints as icGraphdb,
-  Snowflake as icColdstorage,
   ChartScatter as icVectordb,
   HardDriveDownload as icWritebehind,
   /* Messaging */
   Rows3 as icQueue,
-  Logs as icStreambroker,
   Share2 as icPubsub,
   Cable as icWebsocket,
-  ListRestart as icRetryqueue,
   /* Control */
   Scaling as icAutoscaler,
   Funnel as icRatelimiter,
-  Unplug as icBreaker,
   DoorOpen as icApigateway,
-  Blocks as icSidecar,
-  SquareSplitHorizontal as icBulkhead,
-  FunnelX as icLoadshedder,
 } from 'lucide';
 
 /**
@@ -130,10 +119,6 @@ export const KIND_ICON: Record<NodeKind, IconNode> = {
      drawn onto the family's shared store shape. */
   replica: icReplica,
 
-  /* PARTITIONED STORE: one box cut into vertical columns, each its own
-     independent slice; the old glyph's exact idea. */
-  shard: icShard,
-
   /* CONTROLLER: the frame being resized outward; capacity under control. */
   autoscaler: icAutoscaler,
 
@@ -149,33 +134,16 @@ export const KIND_ICON: Record<NodeKind, IconNode> = {
   /* METERING: the funnel; admits a limited rate by shape alone. */
   ratelimiter: icRatelimiter,
 
-  /* FAIL FAST: the connection deliberately pulled apart. The gap is the
-     whole idea, same as the old thrown-switch glyph. */
-  breaker: icBreaker,
-
   /* BLOB BUCKET: a parcel; an opaque object with a handle, deliberately
      NOT the db cylinder because the lesson is that it is not a database. */
   objectstore: icObjectstore,
 
-  /* SEARCH over an index: the magnifier over lines of corpus. */
-  searchindex: icSearchindex,
-
-  /* TIME SERIES: a line series on an axis. */
-  timeseriesdb: icTimeseriesdb,
-
   /* GRAPH: nodes joined by edges; the data model drawn literally. */
   graphdb: icGraphdb,
-
-  /* COLD: the snowflake; pure diagonals, collides with no store shape. */
-  coldstorage: icColdstorage,
 
   /* NEAREST NEIGHBOUR: scattered points in a space; the embedding space
      drawn as a scatter plot, sharing the axis motif with timeseriesdb. */
   vectordb: icVectordb,
-
-  /* PARTITIONED LOG: lanes of entries with per-lane markers; the ordered
-     row family again, one step more structured than queue. */
-  streambroker: icStreambroker,
 
   /* FAN-OUT TOPIC: one node sharing out to many; the deliver-to-everyone
      counterpart of lb's pick-one split. */
@@ -189,24 +157,11 @@ export const KIND_ICON: Record<NodeKind, IconNode> = {
      happens at the door", so the door is the icon. */
   apigateway: icApigateway,
 
-  /* SIDECAR: the small block bolted onto the big one. */
-  sidecar: icSidecar,
-
   /* SERVERLESS: a function in a box; f(x) is the whole product. */
   lambda: icLambda,
 
   /* SCHEDULE: calendar plus clock; fires at a time, not on demand. */
   cron: icCron,
-
-  /* CONTAINMENT: one hull divided into sealed compartments. */
-  bulkhead: icBulkhead,
-
-  /* REDELIVERY: the queue's rows plus a restart loop taking the failed
-     item back around. */
-  retryqueue: icRetryqueue,
-
-  /* BATCH ENCODE: the film frame, the job this farm exists to chew. */
-  transcoder: icTranscoder,
 
   /* CODE AT THE EDGE: the cdn's cloud with a bolt of compute instead of a
      delivery arrow. */
@@ -215,10 +170,6 @@ export const KIND_ICON: Record<NodeKind, IconNode> = {
   /* DEFERRED WRITE: the arrow still on its way down into durable media;
      the gap between ack and disk is the data at risk. */
   writebehind: icWritebehind,
-
-  /* TRIAGE: the limiter's funnel with the discard cross; some traffic is
-     deliberately turned away so the rest survives. */
-  loadshedder: icLoadshedder,
 };
 
 /**
@@ -245,31 +196,20 @@ export const KIND_NAME: Record<NodeKind, string> = {
   queue: 'Queue',
   worker: 'Worker',
   replica: 'Read replicas',
-  shard: 'Sharded store',
   autoscaler: 'Autoscaler',
   region: 'Region',
   cdn: 'CDN',
   ratelimiter: 'Rate limiter',
-  breaker: 'Circuit breaker',
   objectstore: 'Object storage',
-  searchindex: 'Search index',
-  timeseriesdb: 'Time-series store',
   graphdb: 'Graph database',
-  coldstorage: 'Cold storage',
   vectordb: 'Vector database',
-  streambroker: 'Stream broker',
   pubsub: 'Pub/sub topic',
   websocket: 'WebSocket gateway',
   apigateway: 'API gateway',
-  sidecar: 'Sidecar proxy',
   lambda: 'Lambda',
   cron: 'Cron job',
-  bulkhead: 'Bulkhead',
-  retryqueue: 'Retry queue',
-  transcoder: 'Transcoder',
   edgecompute: 'Edge compute',
   writebehind: 'Write-behind cache',
-  loadshedder: 'Load shedder',
 };
 
 /**
@@ -299,31 +239,20 @@ export const KIND_TERM: Record<NodeKind, string> = {
   queue: 'queue',
   worker: 'worker',
   replica: 'read-replica',
-  shard: 'shard',
   autoscaler: 'autoscaler',
   region: 'region',
   cdn: 'cdn',
   ratelimiter: 'rate-limiter',
-  breaker: 'breaker',
   objectstore: 'objectstore',
-  searchindex: 'searchindex',
-  timeseriesdb: 'timeseriesdb',
   graphdb: 'graphdb',
-  coldstorage: 'coldstorage',
   vectordb: 'vectordb',
-  streambroker: 'streambroker',
   pubsub: 'pubsub',
   websocket: 'websocket',
   apigateway: 'apigateway',
-  sidecar: 'sidecar',
   lambda: 'lambda',
   cron: 'cron',
-  bulkhead: 'bulkhead',
-  retryqueue: 'retryqueue',
-  transcoder: 'transcoder',
   edgecompute: 'edgecompute',
   writebehind: 'writebehind',
-  loadshedder: 'loadshedder',
 };
 
 /* ================================================================== *
@@ -497,12 +426,12 @@ export const KIND_GROUPS: KindGroup[] = [
   {
     id: 'compute',
     title: 'Compute',
-    kinds: ['service', 'worker', 'queue', 'retryqueue', 'transcoder'],
+    kinds: ['service', 'worker', 'queue'],
   },
   {
     id: 'data',
     title: 'Data',
-    kinds: ['db', 'cache', 'writebehind', 'replica', 'shard'],
+    kinds: ['db', 'cache', 'writebehind', 'replica'],
   },
   {
     // The polyglot-persistence shelf: each of these exists because putting
@@ -511,11 +440,8 @@ export const KIND_GROUPS: KindGroup[] = [
     title: 'Specialised stores',
     kinds: [
       'objectstore',
-      'searchindex',
-      'timeseriesdb',
       'graphdb',
       'vectordb',
-      'coldstorage',
     ],
   },
   {
@@ -523,20 +449,16 @@ export const KIND_GROUPS: KindGroup[] = [
     // logs, topics, sockets, functions and jobs on a clock.
     id: 'messaging',
     title: 'Messaging',
-    kinds: ['streambroker', 'pubsub', 'websocket', 'lambda', 'cron'],
+    kinds: ['pubsub', 'websocket', 'lambda', 'cron'],
   },
   {
     id: 'control',
     title: 'Control',
     kinds: [
       'ratelimiter',
-      'loadshedder',
-      'breaker',
-      'bulkhead',
       'autoscaler',
       'region',
       'apigateway',
-      'sidecar',
     ],
   },
 ];

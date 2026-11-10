@@ -294,21 +294,6 @@ export const GCP: Vendor = {
       product: 'Cloud Storage',
     },
 
-    coldstorage: {
-      product: 'Cloud Storage Archive class',
-      note: "Not a separate product. Archive is one of Cloud Storage's storage classes, alongside Rapid, Standard, Nearline and Coldline, and it carries a 365 day minimum storage duration.",
-    },
-
-    searchindex: {
-      product: 'Agent Search',
-      note: 'Google has no managed Elasticsearch or OpenSearch of its own, which is the honest answer for a student who wants a search index you operate. Agent Search is the first-party product for searching your own data, and it is a retrieval service rather than an inverted index. Its own docs list six former names, including Vertex AI Search and Enterprise Search, so expect older material to call it something else.',
-    },
-
-    timeseriesdb: {
-      product: 'Bigtable',
-      note: 'No dedicated time series database exists at Google. Bigtable is the usual home for the workload, and Google lists "time-series data, such as CPU and memory usage over time for multiple servers" among its uses, but it is a wide-column store rather than a time series product.',
-    },
-
     graphdb: {
       product: 'Spanner Graph',
       note: 'A feature of Spanner rather than a standalone graph database, and it needs the Enterprise or Enterprise Plus edition. Google has nothing that corresponds to a dedicated graph service.',
@@ -317,11 +302,6 @@ export const GCP: Vendor = {
     vectordb: {
       product: 'Vector Search',
       note: 'The dedicated vector index, renamed from Matching Engine and still carrying that name in some client library classes. If the vectors live beside relational data, pgvector on Cloud SQL or AlloyDB is the other route and avoids running a second system.',
-    },
-
-    streambroker: {
-      product: 'Managed Service for Apache Kafka',
-      note: 'Real Kafka, run by Google, for when the lesson is specifically Kafka. Pub/Sub covers the same shape of problem without the Kafka API.',
     },
 
     pubsub: {
@@ -358,20 +338,9 @@ export const GCP: Vendor = {
       note: 'Google recommends keeping direct read replicas to ten or fewer, and that is guidance rather than an enforced limit, so no number is stored here.',
     },
 
-    shard: {
-      product: 'Spanner',
-      note: 'The closest thing to sharding you do not operate yourself. Spanner splits data automatically rather than asking you to choose a shard key the way a sharded Cloud SQL fleet would.',
-    },
-
     edgecompute: {
       product: 'Service Extensions',
       note: 'Not a general edge runtime, so this is a partial match rather than an equivalent. Service Extensions run your own WebAssembly inside the load balancer, which suits rewriting a header and not hosting an application. The load balancer extensions are generally available; the Media CDN ones are still in preview.',
-    },
-
-    transcoder: {
-      product: 'Transcoder API',
-      // Sizing is not a choice here: the API bills by output minute and
-      // exposes no machine to pick, so there are no sizes to list.
     },
   },
 };

@@ -47,7 +47,6 @@ export function fleetSize(kind: NodeKind, config: NodeConfig): number {
   const count = (v: number | undefined) =>
     typeof v === 'number' && Number.isFinite(v) ? Math.max(1, Math.floor(v)) : 1;
 
-  if (kind === 'shard') return count(config.shardCount);
   // A replica set is the primary plus its replicas, which is what you pay
   // for: the primary is a box too.
   if (kind === 'replica') return count(config.replicaCount) + 1;

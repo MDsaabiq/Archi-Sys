@@ -783,38 +783,6 @@ export function readoutFor(
     }
 
     /**
-     * A shard reports its HOTTEST partition, not its mean.
-     *
-     * The mean is the number that lies. Measured on the real engine at
-     * hotKeyFraction 0.85 with 8 partitions: the node mean sat at 0.17 —
-     * comfortably "ok", green meter, nothing to see — while partition 0 was
-     * pinned at 1.00. A student watching the mean would conclude the store
-     * had 83% headroom at the exact moment one partition was melting.
-     *
-     * So the primary is the max, the meter is driven by the max, and health
-     * is judged on the max. The strip beside it shows the spread that the
-     * single number cannot, and `min` is reported next to it precisely so the
-     * GAP between them is legible: 100% hot against 0% cold is the signature
-     * of a hot key, and it is unmissable when both are printed.
-     */
-    case 'shard': {
-      const hot = clamp(s.maxShardUtilization, 0, 1);
-      /* Strip kind: `a` is the single cell drawn beside the primary (the
-         partition strip occupies the secondary row). Coldest next to hottest
-         is what makes a hot key legible: 100% against 0% is the signature. */
-      return {
-        primary: { value: formatPct(hot), label: 'hot' },
-        a: { value: formatPct(clamp(s.minShardUtilization, 0, 1)), label: 'cold' },
-        b: { value: formatCount(s.queued), label: 'waiting' },
-        load: hot,
-        health: healthOfLoad(hot),
-        spark: hot,
-        sparkUnit: true,
-        losing,
-      };
-    }
-
-    /**
      * A replica set reports its stale-read rate when there is one.
      *
      * Replication lag is the entire reason a read replica is a different
@@ -948,22 +916,6 @@ export function readoutFor(
         losing,
       };
 
-    /* The batch regime: jobs take seconds, so "how many are running and how
-       far behind are we" is the reading, not a per-request latency. */
-    case 'transcoder': {
-      const stuck = util >= 0.999 && backlog > 0;
-      return {
-        primary: { value: formatCount(s.inFlight), label: 'jobs' },
-        a: { value: formatCount(backlog), label: 'waiting' },
-        b: { value: formatMs(s.p50), label: 'per job' },
-        load: util,
-        health: stuck ? 'danger' : healthOfLoad(util),
-        spark: backlog,
-        sparkUnit: false,
-        losing,
-      };
-    }
-
     /* A failover switch. During the dark window the old readout showed "0%
        util", healthy, losing nothing, in the middle of a TOTAL outage. */
     case 'region': {
@@ -1024,68 +976,6 @@ export function readoutFor(
       };
     }
 
-    /* The circuit's state IS the component. A word beats a number here. */
-    case 'breaker': {
-      const state = s.breakerState ?? 'closed';
-      const errRate = clamp(s.breakerErrorRate ?? 0, 0, 1);
-      const rejected = s.rejectedRate ?? 0;
-      const threshold = cfg.errorThreshold ?? 0.5;
-      // How close the window is to tripping; pinned full while open.
-      const strain = state === 'closed' ? frac(errRate, threshold) : 1;
-      return {
-        primary:
-          state === 'open'
-            ? { value: 'OPEN', label: 'circuit' }
-            : state === 'half-open'
-              ? { value: 'probing', label: 'circuit' }
-              : { value: 'closed', label: 'circuit' },
-        a: { value: formatPct(errRate), label: 'dep fails' },
-        b:
-          state === 'open'
-            ? { value: formatRate(rejected), label: 'refused' }
-            : { value: formatCount(s.breakerTrips), label: 'trips' },
-        load: strain,
-        health:
-          state === 'open'
-            ? 'danger'
-            : state === 'half-open'
-              ? 'warn'
-              : healthOfLoad(strain),
-        spark: errRate,
-        sparkUnit: true,
-        losing: rejected > 0,
-      };
-    }
-
-    /* The refresh lag made visible: measured 37% of searches stale while the
-       node showed nothing but "util 25%". */
-    case 'searchindex': {
-      const stale = clamp(s.staleSearchRate ?? 0, 0, 1);
-      return {
-        primary: { value: formatPct(stale), label: 'stale' },
-        a: { value: formatRate(s.searchRate), label: 'search' },
-        b: { value: formatRate(s.indexWriteRate), label: 'index' },
-        load: util,
-        health: worstHealth(healthOfLoad(util), stale > 0.2 ? 'warn' : 'ok'),
-        spark: stale,
-        sparkUnit: true,
-        losing,
-      };
-    }
-
-    /* Two-class cost: the append firehose and the range queries that melt it. */
-    case 'timeseriesdb':
-      return {
-        primary: { value: formatPct(util), label: 'busy' },
-        a: { value: formatRate(s.appendRate), label: 'append' },
-        b: { value: formatRate(s.rangeQueryRate), label: 'range' },
-        load: util,
-        health: healthOfLoad(util),
-        spark: util,
-        sparkUnit: true,
-        losing,
-      };
-
     /* The depth multiplier, measured: what one traversal actually costs. */
     case 'graphdb':
       return {
@@ -1099,27 +989,6 @@ export function readoutFor(
         losing,
       };
 
-    /* Multi-second retrieval is this component's entire identity, so the
-       measured latency takes the headline. There is no queue to report: the
-       vault runs restore jobs against a quota and refuses the excess, so the
-       b cell carries the refusals once they start. */
-    case 'coldstorage': {
-      const denied = s.throttledRate ?? 0;
-      return {
-        primary: { value: formatMs(s.p99), label: 'restore' },
-        a: { value: formatPct(util), label: 'busy' },
-        b:
-          denied > 0
-            ? { value: formatRate(denied), label: 'refused' }
-            : { value: formatCount(s.inFlight), label: 'jobs' },
-        load: util,
-        health: denied > 0 ? 'danger' : healthOfLoad(util),
-        spark: util,
-        sparkUnit: true,
-        losing: losing || denied > 0,
-      };
-    }
-
     /* The recall slider read backwards: measured cost per query. */
     case 'vectordb':
       return {
@@ -1132,28 +1001,6 @@ export function readoutFor(
         sparkUnit: false,
         losing,
       };
-
-    /* Strip kind: the partition strip carries the spread; `a` is the single
-       cell beside the primary. Lag against retention is the meter, and a
-       retention drop is data loss, not lateness: it forces danger. */
-    case 'streambroker': {
-      const lag = s.consumerLag ?? 0;
-      const dropRate = s.retentionDropRate ?? 0;
-      const fill = frac(lag, s.queueLimit);
-      return {
-        primary: { value: formatCount(lag), label: 'lag' },
-        a:
-          dropRate > 0
-            ? { value: formatRate(dropRate), label: 'lost' }
-            : { value: formatRate(s.deliveryRate), label: 'deliver' },
-        b: { value: formatRate(s.throughput), label: 'publish' },
-        load: fill,
-        health: dropRate > 0 ? 'danger' : healthOfLoad(fill),
-        spark: lag,
-        sparkUnit: false,
-        losing: dropRate > 0 || losing,
-      };
-    }
 
     /* One publish in, fanout deliveries out. The amplification IS the
        component; a topic has no fill of its own, so the meter stays flat. */
@@ -1211,39 +1058,6 @@ export function readoutFor(
       };
     }
 
-    /* Envoy-style outlier ejection: the proxy's state in a word, plus the
-       failure rate it is judging its upstream by. */
-    case 'sidecar': {
-      const state = s.breakerState ?? 'closed';
-      const fails = s.upstreamFailRate ?? 0;
-      const rejected = s.rejectedRate ?? 0;
-      const after = Math.max(1, cfg.outlierAfter ?? 5);
-      const strain = state === 'closed' ? frac(s.consecutiveFails ?? 0, after) : 1;
-      return {
-        primary:
-          state === 'open'
-            ? { value: 'EJECTED', label: 'upstream' }
-            : state === 'half-open'
-              ? { value: 'probing', label: 'upstream' }
-              : { value: 'proxying', label: '' },
-        a: { value: formatRate(fails), label: 'fails' },
-        b:
-          state === 'open'
-            ? { value: formatRate(rejected), label: 'refused' }
-            : { value: formatMs(s.p99), label: 'p99' },
-        load: strain,
-        health:
-          state === 'open'
-            ? 'danger'
-            : state === 'half-open' || strain > 0
-              ? 'warn'
-              : 'ok',
-        spark: fails,
-        sparkUnit: false,
-        losing: rejected > 0,
-      };
-    }
-
     /* Serverless: the cold-start story was invisible behind "util 45%". */
     case 'lambda': {
       const cold = clamp(s.coldStartRate ?? 0, 0, 1);
@@ -1288,51 +1102,6 @@ export function readoutFor(
       };
     }
 
-    /* Pool occupancy is the earliest possible warning a dependency slowed:
-       the pool fills within one round trip, long before errors show. Its
-       p99 IS the dependency's, which is the number the pool protects. */
-    case 'bulkhead': {
-      const inUse = s.bulkheadInFlight ?? 0;
-      const limit = s.bulkheadLimit ?? 0;
-      const refused = s.bulkheadRejectedRate ?? 0;
-      const fill = frac(inUse, limit);
-      return {
-        primary: {
-          value: `${formatCount(inUse)}/${formatCount(limit)}`,
-          label: 'pool',
-        },
-        a: { value: formatRate(refused), label: 'refused' },
-        b: { value: formatMs(s.p99), label: 'p99' },
-        load: fill,
-        health: refused > 0 ? 'danger' : healthOfLoad(fill),
-        spark: fill,
-        sparkUnit: true,
-        losing: refused > 0,
-      };
-    }
-
-    /* Failures with somewhere to go: the dead-letter shelf is the bill, the
-       redelivery rate the early warning that it is about to grow. */
-    case 'retryqueue': {
-      const dead = s.deadLetters ?? 0;
-      const deadRate = s.deadLetterRate ?? 0;
-      const redeliver = s.redeliveryRate ?? 0;
-      const fill = frac(s.queued, s.queueLimit);
-      return {
-        primary: { value: formatCount(dead), label: 'dead' },
-        a: { value: formatRate(s.deliveredRate), label: 'deliver' },
-        b: { value: formatRate(redeliver), label: 'retry' },
-        load: fill,
-        health:
-          deadRate > 0
-            ? 'danger'
-            : worstHealth(healthOfLoad(fill), redeliver > 0 ? 'warn' : 'ok'),
-        spark: dead,
-        sparkUnit: false,
-        losing: deadRate > 0 || losing,
-      };
-    }
-
     /* The split is the component: what the PoP answers against what still
        pays the full origin path. */
     case 'edgecompute': {
@@ -1371,27 +1140,6 @@ export function readoutFor(
       };
     }
 
-    /* Triage in numbers: low-priority drops are the component doing its job;
-       any high-priority drop means the protection is exhausted. */
-    case 'loadshedder': {
-      const lowShed = s.lowSheddedRate ?? 0;
-      const highShed = s.highSheddedRate ?? 0;
-      const highIn = s.highAdmittedRate ?? 0;
-      const burst = cfg.burst ?? cfg.rateLimitRps ?? 1;
-      return {
-        primary: { value: formatRate(lowShed), label: 'shed low' },
-        a: { value: formatRate(highIn), label: 'high in' },
-        b:
-          highShed > 0
-            ? { value: formatRate(highShed), label: 'shed high' }
-            : { value: formatCount(s.tokens), label: 'tokens' },
-        load: 1 - frac(s.tokens ?? 0, burst),
-        health: highShed > 0 ? 'danger' : lowShed > 0 ? 'warn' : 'ok',
-        spark: lowShed + highShed,
-        sparkUnit: false,
-        losing: lowShed + highShed > 0,
-      };
-    }
   }
 
   /* Compile-time exhaustiveness: if a NodeKind is ever added without a case
@@ -2798,7 +2546,7 @@ export const NodeView = memo(function NodeView({
    * concept. The "Nx" badge now means partitions on both kinds.
    */
   const structure: 'strip' | 'vessel' | 'stack' | 'none' =
-    node.kind === 'shard' || node.kind === 'replica' || node.kind === 'streambroker'
+    node.kind === 'replica'
       ? 'strip'
       : node.kind === 'queue'
         ? 'vessel'
@@ -2924,11 +2672,9 @@ export const NodeView = memo(function NodeView({
              the whole point of this pass. Said in words rather than as a
              count alone: "4 partitions" beats "4x". */
         badge
-          ? node.kind === 'shard' || node.kind === 'streambroker'
-            ? `${stats?.instances} partitions`
-            : node.kind === 'replica'
-              ? `primary plus ${(stats?.instances ?? 1) - 1} read replicas`
-              : `${stats?.instances} instances`
+          ? node.kind === 'replica'
+            ? `primary plus ${(stats?.instances ?? 1) - 1} read replicas`
+            : `${stats?.instances} instances`
           : null,
         pending > 0 ? `${pending} warming up` : null,
         // The fault is announced, not just drawn: a screen-reader user has

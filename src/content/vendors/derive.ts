@@ -65,12 +65,8 @@ const SIZED_KINDS: ReadonlySet<NodeKind> = new Set([
   'cache',
   'worker',
   'replica',
-  'shard',
-  'searchindex',
-  'timeseriesdb',
   'graphdb',
   'vectordb',
-  'transcoder',
 ]);
 
 export function isSizedKind(kind: NodeKind): boolean {

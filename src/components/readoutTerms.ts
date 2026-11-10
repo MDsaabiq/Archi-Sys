@@ -56,18 +56,12 @@ const BY_LABEL: Readonly<Record<string, string>> = {
 };
 
 const BY_KIND: Partial<Record<NodeKind, Readonly<Record<string, string>>>> = {
-  shard: { hot: 'hot-key', cold: 'shard' },
   lambda: { cold: 'cold-start', warm: 'cold-start', refused: 'throttled' },
-  searchindex: { stale: 'stale-search' },
   graphdb: { query: 'traversal-depth' },
   vectordb: { query: 'recall' },
   ratelimiter: { refused: 'throttled' },
-  breaker: { refused: 'rejected' },
   websocket: { refused: 'conn-refused' },
-  bulkhead: { refused: 'bulkhead-full' },
-  sidecar: { refused: 'outlier-ejection' },
   objectstore: { refused: 'prefix-ceiling' },
-  coldstorage: { restore: 'coldstorage', refused: 'throttled' },
 };
 
 /** Glossary id for a word on a node's box, or undefined when it needs none. */

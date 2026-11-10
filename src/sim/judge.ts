@@ -325,8 +325,6 @@ export const SHORTCUT_KINDS: readonly NodeKind[] = [
   'edgecompute',
   'queue',
   'pubsub',
-  'streambroker',
-  'retryqueue',
   'writebehind',
 ];
 
@@ -526,8 +524,6 @@ export function slotsOf(node: SimNode, peakFleet = 0): number {
   if (!b.servesRequests || b.generatesLoad) return 0;
   const c = node.config;
   switch (node.kind) {
-    case 'shard':
-      return whole(c.shardCount) * Math.max(whole(c.shardCapacity), peakFleet);
     case 'replica':
       return whole(c.capacity) * (whole(c.replicaCount) + 1);
     default:

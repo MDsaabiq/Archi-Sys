@@ -232,7 +232,7 @@ const clampPanel = (key: PanelKey, v: unknown): number => {
 const PHONE_QUERY = '(max-width: 720px)';
 
 function subscribePhone(onChange: () => void): () => void {
-  if (typeof window === 'undefined' || !window.matchMedia) return () => {};
+  if (typeof window === 'undefined' || !window.matchMedia) return () => { };
   const mq = window.matchMedia(PHONE_QUERY);
   mq.addEventListener('change', onChange);
   return () => mq.removeEventListener('change', onChange);
@@ -1167,13 +1167,13 @@ export default function App() {
       ...(coarse
         ? []
         : [
-            {
-              label: 'Keyboard shortcuts',
-              icon: 'M2 5.5A2.5 2.5 0 0 1 4.5 3h15A2.5 2.5 0 0 1 22 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-15A2.5 2.5 0 0 1 2 18.5zM6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M18 13h.01M9 13h6M7 17h10',
-              hint: 'Ctrl+/',
-              onSelect: () => setShortcutsOpen(true),
-            },
-          ]),
+          {
+            label: 'Keyboard shortcuts',
+            icon: 'M2 5.5A2.5 2.5 0 0 1 4.5 3h15A2.5 2.5 0 0 1 22 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-15A2.5 2.5 0 0 1 2 18.5zM6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M18 13h.01M9 13h6M7 17h10',
+            hint: 'Ctrl+/',
+            onSelect: () => setShortcutsOpen(true),
+          },
+        ]),
       {
         label: 'Settings',
         icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z',
@@ -1835,12 +1835,12 @@ export default function App() {
         (topoLiveRef.current.annotations ?? []).map((a) =>
           a.id === id && isSection(a)
             ? {
-                ...a,
-                x,
-                y,
-                width: Math.max(w, SECTION_MIN_WIDTH),
-                height: Math.max(h, SECTION_MIN_HEIGHT),
-              }
+              ...a,
+              x,
+              y,
+              width: Math.max(w, SECTION_MIN_WIDTH),
+              height: Math.max(h, SECTION_MIN_HEIGHT),
+            }
             : a,
         ),
       );
@@ -2166,8 +2166,8 @@ export default function App() {
           ),
           ...(topology.annotations
             ? {
-                annotations: topology.annotations.filter((a) => !dropAnns.has(a.id)),
-              }
+              annotations: topology.annotations.filter((a) => !dropAnns.has(a.id)),
+            }
             : {}),
         });
       }
@@ -2777,9 +2777,9 @@ export default function App() {
     () =>
       challenge
         ? designKey(
-            challenge,
-            judgedTopology(challenge, freshStart(challenge)).topology,
-          )
+          challenge,
+          judgedTopology(challenge, freshStart(challenge)).topology,
+        )
         : '',
     [challenge],
   );
@@ -3156,8 +3156,8 @@ export default function App() {
   /* The watch ends with the panel, or with a new verdict. */
   const breakWatch =
     breakShown &&
-    breakView.status === 'done' &&
-    breakWatchSet?.result === breakView.result
+      breakView.status === 'done' &&
+      breakWatchSet?.result === breakView.result
       ? breakWatchSet
       : null;
 
@@ -4361,7 +4361,6 @@ export default function App() {
     </div>
   );
 }
-
 /**
  * Stable empty array for the no-selection case. A fresh `[]` each render
  * would give the Inspector a new prop identity every 100ms and defeat any

@@ -31,18 +31,12 @@ export function suggestionFor(kind: NodeKind): string | null {
       // A load balancer being the bottleneck is unusual; its own limit is
       // rarely the real story.
       return 'A load balancer saturating is uncommon. Check the components behind it are not the actual limit before adding capacity here.';
-    case 'sidecar':
-      // Every hop through a sidecar pays its tax; retries multiply it.
-      return 'Each hop pays this proxy a tax. Check retries and timeouts before adding capacity; a retry storm here costs more than the base load does.';
     case 'apigateway':
       return 'This is a stateless front door, so add instances to spread the load across more of them.';
     case 'worker':
       return 'Workers drain a queue at their own pace. Add instances to drain it faster.';
     case 'service':
     case 'objectstore':
-    case 'coldstorage':
-    case 'retryqueue':
-    case 'transcoder':
     case 'edgecompute':
       // The remaining ceiling kinds run the same slot discipline with no
       // sharper lever than the obvious one: more parallel slots, or less

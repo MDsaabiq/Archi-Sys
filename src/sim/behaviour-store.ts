@@ -34,9 +34,6 @@ import type { BehaviourCtx, NodeStateLike, ReqLike } from './engine-types';
 import type { AdmitAction, ComponentBehaviour } from './behaviour';
 import { log2, pow } from './fdlibm';
 
-/** Keyspace the engine draws request keys from; mirrored here for sizing. */
-const KEYSPACE = 64;
-
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
@@ -150,83 +147,6 @@ const objectstore: ComponentBehaviour = {
 
   decorateStats(ctx, state, stats: NodeStats): void {
     stats.slowdownRate = ctx.counterRate(state, 'slowdown');
-  },
-};
-
-/* ================================================================== *
- * coldstorage -- archival tier (Glacier-like)
- *
- * NOT a slow database, and the difference is the whole component. A slow
- * database queues: push online traffic at it and latency compounds as the
- * line grows. An archive runs restore JOBS: a retrieval takes its flat
- * multi-second time no matter how busy the vault is, there is NO queue to
- * stand in, and the vault runs at most `capacity` concurrent restores
- * (its provisioned retrieval capacity). A request that finds every
- * restore slot taken is refused on the spot ('throttled', the archival
- * tier's RequestLimitExceeded).
- *
- * So under overload the two kinds fail in opposite directions: the slow
- * db's p99 explodes while its error rate stays low; the archive's p99
- * stays pinned at the flat retrieval time while refusals climb. Both
- * teach "keep online traffic away", but only this one teaches it the way
- * Glacier actually does.
- * ================================================================== */
-
-interface ColdStorageExt {
-  /** Restore jobs currently running. */
-  jobs: number;
-}
-
-const coldDrained = (_ctx: BehaviourCtx, state: NodeStateLike, _req: ReqLike): void => {
-  const ext = state.ext as ColdStorageExt;
-  if (ext.jobs > 0) ext.jobs--;
-};
-
-const coldstorage: ComponentBehaviour = {
-  kind: 'coldstorage',
-  // A store: an outgoing edge is a replication or index feed, not a query
-  // thread, and its drain carries commit bookkeeping that must stay at
-  // service end.
-  blocksOnDownstream: false,
-  servesRequests: true,
-  generatesLoad: false,
-  pullsFromQueues: false,
-  buffersForConsumers: false,
-  // No queue and no engine slots: jobs are tracked in ext, timed by
-  // serveWithin, and the only admission outcomes are "job started" and
-  // "refused". queueLimit is ignored, because a vault has no line to wait in.
-  pump: 'none',
-  creditsJoinCompletion: true,
-
-  initState: (): ColdStorageExt => ({ jobs: 0 }),
-
-  onAdmit(ctx, state, req): AdmitAction {
-    const ext = state.ext as ColdStorageExt;
-    if (ext.jobs >= ctx.effectiveCapacity(state)) {
-      ctx.countCustom(state, 'restoreDenied', 1);
-      ctx.reject(state, req, 'throttled');
-      return 'handled';
-    }
-    ext.jobs++;
-    ctx.serveWithin(state, req, coldDrained);
-    return 'handled';
-  },
-
-  load(ctx, state): number {
-    const ext = state.ext as ColdStorageExt;
-    return ext.jobs / Math.max(1, ctx.effectiveCapacity(state));
-  },
-
-  onTick(ctx, state): void {
-    const ext = state.ext as ColdStorageExt;
-    ctx.reportOccupancy(state, ext.jobs, ctx.effectiveCapacity(state));
-  },
-
-  decorateStats(ctx, state, stats: NodeStats): void {
-    const ext = state.ext as ColdStorageExt | null;
-    stats.inFlight = ext ? ext.jobs : 0;
-    stats.queued = 0;
-    stats.throttledRate = ctx.counterRate(state, 'restoreDenied');
   },
 };
 
@@ -471,175 +391,6 @@ const db: ComponentBehaviour = {
 };
 
 /* ================================================================== *
- * searchindex -- a search cluster with asynchronous indexing
- *
- * A write is acknowledged when its (expensive) indexing work completes,
- * but the document only becomes SEARCHABLE `indexLagMs` after that
- * commit, which is the refresh interval of a real search engine. A
- * search hitting a key inside that window is served from the old index
- * and counted as stale: that counter is the indexing lag made visible.
- * ================================================================== */
-
-interface SearchExt extends PoolExt {
-  /** Searchability deadline per key; -Infinity means "never written". */
-  visibleAt: Float64Array;
-}
-
-const searchDrained = makeDrained(
-  // At service start: a SEARCH is judged against the index it is actually
-  // reading right now. Judged here rather than at admission so a query
-  // that waited in line long enough for the refresh to land counts fresh,
-  // which is exactly how a real cluster behaves.
-  (ctx, state, req) => {
-    if (req.isWrite) return;
-    const ext = state.ext as SearchExt;
-    const stale = ctx.now < ext.visibleAt[req.key % KEYSPACE];
-    ctx.countCustom(state, stale ? 'staleSearch' : 'freshSearch', 1);
-  },
-  // At service end: the write has committed, so the refresh clock starts
-  // HERE. The admission-time claim below was only a lower bound.
-  (ctx, state, req) => {
-    if (!req.isWrite) return;
-    const ext = state.ext as SearchExt;
-    const lag = Math.max(0, num(state.config.indexLagMs, 0));
-    const key = req.key % KEYSPACE;
-    const visible = ctx.now + lag;
-    if (visible > ext.visibleAt[key]) ext.visibleAt[key] = visible;
-  },
-);
-
-// The onStart hook runs inside searchDrained's pump as well; capture it once
-// so admission and pump judge staleness identically.
-const searchStart = (ctx: BehaviourCtx, state: NodeStateLike, req: ReqLike): void => {
-  if (req.isWrite) return;
-  const ext = state.ext as SearchExt;
-  const stale = ctx.now < ext.visibleAt[req.key % KEYSPACE];
-  ctx.countCustom(state, stale ? 'staleSearch' : 'freshSearch', 1);
-};
-
-function searchClassify(ctx: BehaviourCtx, state: NodeStateLike, req: ReqLike): void {
-  // One unconditional draw decides search vs write, the same convention the
-  // replica set uses for read vs write.
-  const isWrite = ctx.roll() >= clamp01(num(state.config.readFraction, 0.9));
-  ctx.markWrite(req, isWrite);
-  if (isWrite) {
-    // Writes pay the indexing surcharge on top of the drawn serviceMs.
-    ctx.addServiceDelay(req, Math.max(0, num(state.config.indexMs, 0)));
-    ctx.countCustom(state, 'indexWrite', 1);
-    // Claim a lower-bound searchability deadline immediately: a zero-ms
-    // service completes synchronously inside serveWithin, so waiting for
-    // the commit alone would let a same-instant search read a write that
-    // has not even been acknowledged yet. Pushed to its true value (commit
-    // time + lag) in the onServed hook above.
-    const ext = state.ext as SearchExt;
-    const lag = Math.max(0, num(state.config.indexLagMs, 0));
-    const key = req.key % KEYSPACE;
-    const visible = ctx.now + lag;
-    if (visible > ext.visibleAt[key]) ext.visibleAt[key] = visible;
-  }
-}
-
-const searchindex: ComponentBehaviour = {
-  kind: 'searchindex',
-  // A store: an outgoing edge is a replication or index feed, not a query
-  // thread, and its drain carries commit bookkeeping that must stay at
-  // service end.
-  blocksOnDownstream: false,
-  servesRequests: true,
-  instanceModel: 'slots',
-  scaleField: 'instances',
-  generatesLoad: false,
-  pullsFromQueues: false,
-  buffersForConsumers: false,
-  pump: 'none',
-  creditsJoinCompletion: true,
-
-  initState(): SearchExt {
-    const visibleAt = new Float64Array(KEYSPACE);
-    visibleAt.fill(-Infinity);
-    return { ...initPool(), visibleAt };
-  },
-
-  onDiscard: discardPool,
-  onAdmit(ctx, state, req): AdmitAction {
-    return poolAdmit(ctx, state, req, searchClassify, searchStart, searchDrained);
-  },
-
-  onTick: reportPool,
-  load: poolLoad,
-
-  decorateStats(ctx, state, stats): void {
-    decoratePool(state, stats);
-    const fresh = ctx.counterRate(state, 'freshSearch');
-    const stale = ctx.counterRate(state, 'staleSearch');
-    const total = fresh + stale;
-    stats.searchRate = total;
-    stats.staleSearchRate = total > 0 ? stale / total : 0;
-    stats.indexWriteRate = ctx.counterRate(state, 'indexWrite');
-  },
-};
-
-/* ================================================================== *
- * timeseriesdb -- cheap appends, expensive range queries
- *
- * An append costs only the drawn serviceMs (fractions of the cost of a
- * row in a relational store); a range query pays `rangeQueryMs` on top,
- * for scanning and aggregating many points. A few percent of range
- * queries dominates the pool, which is the argument for keeping metrics
- * out of the main database stated as arithmetic.
- * ================================================================== */
-
-const tsdbStart = (ctx: BehaviourCtx, state: NodeStateLike, req: ReqLike): void => {
-  // Appends were marked as writes in classify; count what is actually
-  // being SERVED, so the readout matches throughput rather than arrivals.
-  ctx.countCustom(state, req.isWrite ? 'append' : 'rangeQuery', 1);
-};
-
-const tsdbDrained = makeDrained(tsdbStart, null);
-
-function tsdbClassify(ctx: BehaviourCtx, state: NodeStateLike, req: ReqLike): void {
-  // One unconditional draw: is this a range query? Taken whatever the
-  // slider says, so replay does not depend on its value.
-  const isRange = ctx.roll() < clamp01(num(state.config.rangeQueryFraction, 0));
-  ctx.markWrite(req, !isRange);
-  if (isRange) {
-    ctx.addServiceDelay(req, Math.max(0, num(state.config.rangeQueryMs, 0)));
-  }
-}
-
-const timeseriesdb: ComponentBehaviour = {
-  kind: 'timeseriesdb',
-  // A store: an outgoing edge is a replication or index feed, not a query
-  // thread, and its drain carries commit bookkeeping that must stay at
-  // service end.
-  blocksOnDownstream: false,
-  servesRequests: true,
-  instanceModel: 'slots',
-  scaleField: 'instances',
-  generatesLoad: false,
-  pullsFromQueues: false,
-  buffersForConsumers: false,
-  pump: 'none',
-  creditsJoinCompletion: true,
-
-  initState: initPool,
-
-  onDiscard: discardPool,
-  onAdmit(ctx, state, req): AdmitAction {
-    return poolAdmit(ctx, state, req, tsdbClassify, tsdbStart, tsdbDrained);
-  },
-
-  onTick: reportPool,
-  load: poolLoad,
-
-  decorateStats(ctx, state, stats): void {
-    decoratePool(state, stats);
-    stats.appendRate = ctx.counterRate(state, 'append');
-    stats.rangeQueryRate = ctx.counterRate(state, 'rangeQuery');
-  },
-};
-
-/* ================================================================== *
  * graphdb -- traversal cost grows with depth
  *
  * Edges visited grow roughly with outDegree^depth, so with the modelled
@@ -751,9 +502,6 @@ const vectordb: ComponentBehaviour = {
 export const STORE_BEHAVIOURS: ComponentBehaviour[] = [
   db,
   objectstore,
-  searchindex,
-  timeseriesdb,
   graphdb,
-  coldstorage,
   vectordb,
 ];

@@ -157,19 +157,6 @@ function baseConfig(kind: NodeKind): Omit<NodeConfig, keyof typeof EXTRA_DEFAULT
         retries: 0,
         rps: 0,
       };
-    case 'shard':
-      // Per-shard slots live in shardCapacity; `capacity` is unused here.
-      return {
-        capacity: 4,
-        serviceMs: 25,
-        serviceCv: 0.6,
-        queueLimit: 32,
-        hitRate: 0,
-        errorRate: 0,
-        timeoutMs: 0,
-        retries: 0,
-        rps: 0,
-      };
     case 'cdn':
       // An edge PoP: very fast, very high hit rate, lots of concurrency.
       // At hitRate 0.92 the origin behind it sees 8% of the offered load.
@@ -199,24 +186,6 @@ function baseConfig(kind: NodeKind): Omit<NodeConfig, keyof typeof EXTRA_DEFAULT
         rps: 0,
         rateLimitRps: 100,
         burst: 100,
-      };
-    case 'breaker':
-      // Trips once half the downstream calls in a 5s window fail, stays open
-      // 3s, then lets 3 probes decide whether to close.
-      return {
-        capacity: 1,
-        serviceMs: 0,
-        serviceCv: 0,
-        queueLimit: 0,
-        hitRate: 0,
-        errorRate: 0,
-        timeoutMs: 0,
-        retries: 0,
-        rps: 0,
-        errorThreshold: 0.5,
-        windowMs: 5000,
-        openMs: 3000,
-        halfOpenProbes: 3,
       };
     case 'autoscaler':
       // Adds and removes INSTANCES to hold its target at 70% utilisation,
@@ -298,40 +267,6 @@ function baseConfig(kind: NodeKind): Omit<NodeConfig, keyof typeof EXTRA_DEFAULT
         rps: 0,
         prefixRps: 150,
       };
-    case 'searchindex':
-      // Searches are cheap (8ms); a write pays +60ms of indexing on top and
-      // becomes searchable only 1.5s after it commits. At the default 90/10
-      // read mix the mean cost is ~14ms -> 12 slots gives ~850 rps.
-      return {
-        capacity: 12,
-        serviceMs: 8,
-        serviceCv: 0.5,
-        queueLimit: 128,
-        hitRate: 0,
-        errorRate: 0,
-        timeoutMs: 0,
-        retries: 0,
-        rps: 0,
-        indexMs: 60,
-        indexLagMs: 1500,
-      };
-    case 'timeseriesdb':
-      // Appends cost 1.5ms; a range query pays +120ms. At 5% range queries
-      // the mean is ~7.5ms -> 16 slots gives ~2100 rps of mixed traffic,
-      // which is the "metrics firehose" headroom the kind exists to show.
-      return {
-        capacity: 16,
-        serviceMs: 1.5,
-        serviceCv: 0.4,
-        queueLimit: 1024,
-        hitRate: 0,
-        errorRate: 0,
-        timeoutMs: 0,
-        retries: 0,
-        rps: 0,
-        rangeQueryFraction: 0.05,
-        rangeQueryMs: 120,
-      };
     case 'graphdb':
       // Depth 2 (friends-of-friends) costs 3x the base 6ms -> 18ms mean,
       // 8 slots -> ~440 rps. Each extra hop of depth divides that by 3.
@@ -346,23 +281,6 @@ function baseConfig(kind: NodeKind): Omit<NodeConfig, keyof typeof EXTRA_DEFAULT
         retries: 0,
         rps: 0,
         traversalDepth: 2,
-      };
-    case 'coldstorage':
-      // Archival: SECONDS per restore JOB, a hard quota of 24 concurrent
-      // jobs (24 / 2.8s is ~8.5 rps of ceiling), and NO queue: a restore
-      // beyond the quota is refused on the spot, not queued. Fine for a
-      // trickle of restores, hopeless for anything shaped like online
-      // traffic. Callers need a long timeout. queueLimit is ignored.
-      return {
-        capacity: 24,
-        serviceMs: 2800,
-        serviceCv: 0.3,
-        queueLimit: 64,
-        hitRate: 0,
-        errorRate: 0,
-        timeoutMs: 0,
-        retries: 0,
-        rps: 0,
       };
     case 'vectordb':
       // Mean query cost is serviceMs * log2(2 + indexSizeK) / (1 - recall):
@@ -380,22 +298,6 @@ function baseConfig(kind: NodeKind): Omit<NodeConfig, keyof typeof EXTRA_DEFAULT
         rps: 0,
         indexSizeK: 1000,
         recallTarget: 0.9,
-      };
-    case 'streambroker':
-      // A partitioned log: 1ms producer ack, 4 partitions, and queueLimit is
-      // RETENTION in messages. Per consumer group the parallelism ceiling is
-      // the partition count, so throughput per group = 4 x (1000/consumerMs).
-      return {
-        capacity: 1,
-        serviceMs: 1,
-        serviceCv: 0.2,
-        queueLimit: 2000,
-        hitRate: 0,
-        errorRate: 0,
-        timeoutMs: 0,
-        retries: 0,
-        rps: 0,
-        partitions: 4,
       };
     case 'pubsub':
       // A topic: near-instant ack, then one delivery per subscriber edge.
@@ -444,23 +346,6 @@ function baseConfig(kind: NodeKind): Omit<NodeConfig, keyof typeof EXTRA_DEFAULT
         burst: 300,
         authFailRate: 0.01,
       };
-    case 'sidecar':
-      // The proxy tax: 2ms on every request, in exchange for 2 retries, a
-      // 500ms per-attempt deadline, and outlier ejection after 5 straight
-      // downstream failures (3s ejection, matching the breaker's openMs).
-      return {
-        capacity: 32,
-        serviceMs: 2,
-        serviceCv: 0.2,
-        queueLimit: 64,
-        hitRate: 0,
-        errorRate: 0,
-        timeoutMs: 500,
-        retries: 2,
-        rps: 0,
-        outlierAfter: 5,
-        openMs: 3000,
-      };
     case 'lambda':
       // Serverless: 25ms of work when warm, +350ms cold start, instances kept
       // warm 12s, at most 40 running at once (beyond that the platform
@@ -494,59 +379,6 @@ function baseConfig(kind: NodeKind): Omit<NodeConfig, keyof typeof EXTRA_DEFAULT
         rps: 0,
         intervalMs: 20000,
         batchSize: 50,
-      };
-    case 'bulkhead':
-      // A pool of 8 concurrent calls. Refusing is free, so no slots, no
-      // queue, no service time: the pool count is the whole component.
-      return {
-        capacity: 1,
-        serviceMs: 0,
-        serviceCv: 0,
-        queueLimit: 0,
-        hitRate: 0,
-        errorRate: 0,
-        timeoutMs: 0,
-        retries: 0,
-        rps: 0,
-        bulkheadMax: 8,
-        bulkheadMode: 'reject',
-        acquireQueueMax: 100,
-        acquireTimeoutMs: 1000,
-      };
-    case 'retryqueue':
-      // Delivery concurrency of 8 at ~3ms dispatch cost. Each failed
-      // delivery gets 2 redeliveries with backoff before it dead-letters;
-      // the 1s per-attempt deadline is what turns a hung consumer into a
-      // retryable failure instead of a stuck message.
-      return {
-        capacity: 8,
-        serviceMs: 3,
-        serviceCv: 0.3,
-        queueLimit: 2000,
-        hitRate: 0,
-        errorRate: 0,
-        timeoutMs: 1000,
-        retries: 2,
-        rps: 0,
-      };
-    case 'transcoder':
-      // Batch regime: 1.2 SECONDS per job, two jobs per box. One instance
-      // is 2 * (1000/1200) = ~1.7 jobs/s; feed it from a queue and size the
-      // farm against the arrival rate, because a structural deficit grows
-      // the backlog forever. Each finished job hands 3 renditions (the
-      // quality ladder) downstream as detached uploads, so storage sees 3x
-      // the job rate.
-      return {
-        capacity: 2,
-        serviceMs: 1200,
-        serviceCv: 0.4,
-        queueLimit: 8,
-        hitRate: 0,
-        errorRate: 0,
-        timeoutMs: 0,
-        retries: 0,
-        rps: 0,
-        renditions: 3,
       };
     case 'edgecompute':
       // A PoP function: ~1ms, lots of concurrency, and it can fully answer
@@ -583,25 +415,6 @@ function baseConfig(kind: NodeKind): Omit<NodeConfig, keyof typeof EXTRA_DEFAULT
         rps: 0,
         flushDelayMs: 200,
       };
-    case 'loadshedder':
-      // Admits 300 rps sustained. 30% of the key space is best-effort
-      // traffic, and 30% of the bucket is reserved for the rest, so under
-      // saturation the best-effort tier is dropped first.
-      return {
-        capacity: 1,
-        serviceMs: 0,
-        serviceCv: 0,
-        queueLimit: 0,
-        hitRate: 0,
-        errorRate: 0,
-        timeoutMs: 0,
-        retries: 0,
-        rps: 0,
-        rateLimitRps: 300,
-        burst: 300,
-        lowPriorityShare: 0.3,
-        priorityReserve: 0.3,
-      };
     default:
       return {
         capacity: 1,
@@ -626,31 +439,20 @@ const DEFAULT_LABEL: Record<NodeKind, string> = {
   queue: 'Queue',
   worker: 'Worker',
   replica: 'Read Replicas',
-  shard: 'Sharded Store',
   cdn: 'CDN',
   ratelimiter: 'Rate Limiter',
-  breaker: 'Circuit Breaker',
   autoscaler: 'Autoscaler',
   region: 'Region',
   objectstore: 'Object Storage',
-  searchindex: 'Search Index',
-  timeseriesdb: 'Time-Series DB',
   graphdb: 'Graph Database',
-  coldstorage: 'Cold Storage',
   vectordb: 'Vector Database',
-  streambroker: 'Stream Broker',
   pubsub: 'Pub/Sub Topic',
   websocket: 'WebSocket Gateway',
   apigateway: 'API Gateway',
-  sidecar: 'Sidecar Proxy',
   lambda: 'Lambda',
   cron: 'Cron Job',
-  bulkhead: 'Bulkhead',
-  retryqueue: 'Retry Queue',
-  transcoder: 'Transcoder',
   edgecompute: 'Edge Compute',
   writebehind: 'Write-Behind Cache',
-  loadshedder: 'Load Shedder',
 };
 
 let nodeCounter = 0;
@@ -1199,11 +1001,9 @@ const circuitBreaker: Topology = {
       queueLimit: 128,
       timeoutMs: 600,
     }),
-    node('breaker', 'breaker', 'Circuit Breaker', COL(2), ROW(1), {
-      errorThreshold: 0.5,
-      windowMs: 4000,
-      openMs: 3000,
-      halfOpenProbes: 3,
+    node('breaker', 'ratelimiter', 'Payment Gate', COL(2), ROW(1), {
+      rateLimitRps: 100,
+      burst: 20,
     }),
     node('payments', 'service', 'Payments API', COL(3), ROW(1), {
       capacity: 4,
@@ -1289,13 +1089,11 @@ const shardedDatabase: Topology = {
       serviceCv: 0.4,
       queueLimit: 256,
     }),
-    node('shards', 'shard', 'Sharded Store', COL(2), ROW(1), {
+    node('shards', 'db', 'Partitioned Database', COL(2), ROW(1), {
+      capacity: 16,
       serviceMs: 25,
       serviceCv: 0.6,
-      queueLimit: 32,
-      shardCount: 4,
-      shardCapacity: 4,
-      hotKeyFraction: 0,
+      queueLimit: 128,
     }),
   ],
   edges: [edge('client', 'api'), edge('api', 'shards')],
@@ -1514,13 +1312,11 @@ const fullStack: Topology = {
       hitRate: 0.6,
       queueLimit: 512,
     }),
-    node('shards', 'shard', 'Sharded Store', COL(5), ROW(0), {
+    node('shards', 'db', 'Database Tier', COL(5), ROW(0), {
+      capacity: 8,
       serviceMs: 25,
       serviceCv: 0.6,
-      queueLimit: 32,
-      shardCount: 4,
-      shardCapacity: 2,
-      hotKeyFraction: 0,
+      queueLimit: 64,
     }),
     node('queue', 'queue', 'Job Queue', COL(4), ROW(2), {
       serviceMs: 1,
@@ -1639,15 +1435,15 @@ const specialisedStores: Topology = {
       serviceMs: 40,
       serviceCv: 0.4,
     }),
-    node('search', 'searchindex', 'Search Index', COL(3), ROW(0)),
+    node('search', 'db', 'Search Store', COL(3), ROW(0), { capacity: 16, serviceMs: 8, queueLimit: 128 }),
     // 12 slots at ~50ms per query is a 240 rps ceiling: a third used at 1x,
     // and the first thing to saturate at 4x, which makes the vector index
     // the knee of the whole preset.
     node('vectors', 'vectordb', 'Vector Index', COL(3), ROW(1), { capacity: 12 }),
     node('blobs', 'objectstore', 'Object Storage', COL(3), ROW(2)),
-    node('glacier', 'coldstorage', 'Cold Storage', COL(3), LROW(3, 1)),
+    node('glacier', 'objectstore', 'Archive Store', COL(3), LROW(3, 1)),
     node('social', 'graphdb', 'Social Graph', COL(4), ROW(0)),
-    node('metrics', 'timeseriesdb', 'Metrics Store', COL(4), ROW(2)),
+    node('metrics', 'db', 'Metrics Store', COL(4), ROW(2), { capacity: 16, serviceMs: 2, queueLimit: 1024 }),
   ],
   edges: [
     edge('client', 'lb'),
@@ -1745,10 +1541,8 @@ const eventDriven: Topology = {
       serviceCv: 0.5,
       queueLimit: 128,
     }),
-    node('broker', 'streambroker', 'Event Stream', 700, 60, {
+    node('broker', 'pubsub', 'Event Stream', 700, 60, {
       serviceMs: 1,
-      partitions: 4,
-      queueLimit: 2000,
     }),
     node('indexer', 'service', 'Search Indexer', 930, 20, {
       capacity: 4,
@@ -1787,13 +1581,12 @@ const eventDriven: Topology = {
       serviceMs: 5,
       connectionMs: 8000,
     }),
-    node('mesh', 'sidecar', 'Chat Sidecar', 470, 420, {
+    node('mesh', 'service', 'Chat Gateway', 470, 420, {
       capacity: 32,
       serviceMs: 2,
       timeoutMs: 500,
       retries: 2,
-      outlierAfter: 5,
-      openMs: 3000,
+      queueLimit: 64,
     }),
     node('chatsvc', 'service', 'Chat Service', 690, 420, {
       capacity: 8,
@@ -1906,11 +1699,9 @@ const eventDriven: Topology = {
 const resilientDelivery: Topology = {
   nodes: [
     node('client', 'client', 'Client', COL(0), ROW(1), { rps: 240, timeoutMs: 2500 }),
-    node('shedder', 'loadshedder', 'Load Shedder', COL(1), ROW(1), {
+    node('shedder', 'ratelimiter', 'Rate Limiter', COL(1), ROW(1), {
       rateLimitRps: 700,
       burst: 700,
-      lowPriorityShare: 0.3,
-      priorityReserve: 0.3,
     }),
     node('api', 'service', 'API Server', COL(2), ROW(1), {
       capacity: 16,
@@ -1918,8 +1709,10 @@ const resilientDelivery: Topology = {
       serviceCv: 0.4,
       queueLimit: 128,
     }),
-    node('bulkhead', 'bulkhead', 'Recs Bulkhead', COL(3), ROW(0), {
-      bulkheadMax: 12,
+    node('bulkhead', 'service', 'Recs Gateway', COL(3), ROW(0), {
+      capacity: 12,
+      serviceMs: 2,
+      queueLimit: 32,
     }),
     node('recs', 'service', 'Recommendations', COL(4), ROW(0), {
       capacity: 6,
@@ -1940,13 +1733,11 @@ const resilientDelivery: Topology = {
       serviceCv: 0.6,
       queueLimit: 96,
     }),
-    node('retryq', 'retryqueue', 'Notify Queue', COL(3), ROW(2), {
+    node('retryq', 'queue', 'Notify Queue', COL(3), ROW(2), {
       capacity: 8,
       serviceMs: 3,
       serviceCv: 0.3,
       queueLimit: 2000,
-      timeoutMs: 1000,
-      retries: 2,
     }),
     node('notify', 'service', 'Notification Service', COL(4), ROW(2), {
       capacity: 6,
@@ -1964,7 +1755,7 @@ const resilientDelivery: Topology = {
       serviceCv: 0.2,
       queueLimit: 5000,
     }),
-    node('transcoder', 'transcoder', 'Transcoder Farm', COL(2), LROW(3, 1), {
+    node('transcoder', 'worker', 'Transcoder Farm', COL(2), LROW(3, 1), {
       instances: 2,
       capacity: 2,
       serviceMs: 1200,
@@ -2139,13 +1930,11 @@ const discord: Topology = {
       queueLimit: 32,
     }),
     // Messages are partitioned by channel; a shard here IS a channel range.
-    node('scylla', 'shard', 'Message Store', COL(3), ROW(2), {
+    node('scylla', 'db', 'Message Store', COL(3), ROW(2), {
+      capacity: 12,
       serviceMs: 40,
       serviceCv: 0.6,
       queueLimit: 32,
-      shardCount: 6,
-      shardCapacity: 2,
-      hotKeyFraction: 0,
     }),
     node('search-q', 'queue', 'Index Queue', COL(3), LROW(3, 1), {
       serviceMs: 1,
@@ -2157,8 +1946,10 @@ const discord: Topology = {
       serviceMs: 12,
       serviceCv: 0.5,
     }),
-    node('search', 'searchindex', 'Message Search', COL(5), LROW(3, 1), {
-      readFraction: 0.15,
+    node('search', 'db', 'Message Search', COL(5), LROW(3, 1), {
+      capacity: 12,
+      serviceMs: 8,
+      queueLimit: 64,
     }),
 
     // Media lane: attachments behind a CDN.
@@ -2376,11 +2167,9 @@ const uber: Topology = {
       replicationLagMs: 50,
       readFraction: 0.7,
     }),
-    node('pay-brk', 'breaker', 'Payment Breaker', COL(3), LROW(3, 1), {
-      errorThreshold: 0.5,
-      windowMs: 4000,
-      openMs: 3000,
-      halfOpenProbes: 3,
+    node('pay-brk', 'ratelimiter', 'Payment Gate', COL(3), LROW(3, 1), {
+      rateLimitRps: 200,
+      burst: 50,
     }),
     node('payments', 'service', 'Payments', COL(4), LROW(3, 1), {
       capacity: 4,
@@ -2401,11 +2190,9 @@ const uber: Topology = {
       serviceCv: 0.4,
       queueLimit: 256,
     }),
-    node('kafka', 'streambroker', 'Kafka Event Bus', COL(2), LROW(4, 2), {
+    node('kafka', 'pubsub', 'Kafka Event Bus', COL(2), LROW(4, 2), {
       serviceMs: 0.5,
       serviceCv: 0.2,
-      partitions: 12,
-      queueLimit: 4000,
     }),
     node('geo-upd', 'service', 'Geo Updater', COL(3), LROW(4, 2), {
       capacity: 12,
@@ -2414,13 +2201,11 @@ const uber: Topology = {
       queueLimit: 64,
     }),
     // Sharded by region cell: one shard is one slice of the city.
-    node('geo', 'shard', 'Geo Index (H3)', COL(4), LROW(4, 2), {
+    node('geo', 'db', 'Geo Index (H3)', COL(4), LROW(4, 2), {
+      capacity: 12,
       serviceMs: 10,
       serviceCv: 0.5,
       queueLimit: 32,
-      shardCount: 6,
-      shardCapacity: 2,
-      hotKeyFraction: 0,
     }),
     node('surge-w', 'service', 'Surge Pipeline', COL(3), LROW(5, 2), {
       capacity: 8,
@@ -2428,9 +2213,10 @@ const uber: Topology = {
       serviceCv: 0.5,
       queueLimit: 64,
     }),
-    node('m3', 'timeseriesdb', 'M3 Metrics', COL(3), LROW(6, 2), {
-      rangeQueryFraction: 0.02,
-      rangeQueryMs: 120,
+    node('m3', 'db', 'M3 Metrics', COL(3), LROW(6, 2), {
+      capacity: 16,
+      serviceMs: 2,
+      queueLimit: 512,
     }),
   ],
   edges: [
@@ -2585,19 +2371,17 @@ const netflix: Topology = {
       serviceCv: 0.2,
       queueLimit: 5000,
     }),
-    node('ves', 'transcoder', 'VES Encode Farm', COL(2), ROW(1), {
+    node('ves', 'worker', 'VES Encode Farm', COL(2), ROW(1), {
       instances: 2,
       capacity: 2,
       serviceMs: 1500,
       serviceCv: 0.3,
     }),
-    node('atlas', 'timeseriesdb', 'Atlas Telemetry', COL(3), ROW(1), {
+    node('atlas', 'db', 'Atlas Telemetry', COL(3), ROW(1), {
       capacity: 16,
       serviceMs: 1.5,
       serviceCv: 0.4,
       queueLimit: 1024,
-      rangeQueryFraction: 0.03,
-      rangeQueryMs: 120,
     }),
     // Control plane: the API calls. Two orders of magnitude less traffic
     // than streaming, and where all the complexity lives.
@@ -2621,11 +2405,9 @@ const netflix: Topology = {
       queueLimit: 128,
       timeoutMs: 600,
     }),
-    node('hystrix', 'breaker', 'Hystrix Breaker', COL(3), LROW(2, 1), {
-      errorThreshold: 0.4,
-      windowMs: 4000,
-      openMs: 4000,
-      halfOpenProbes: 3,
+    node('hystrix', 'ratelimiter', 'Hystrix Gate', COL(3), LROW(2, 1), {
+      rateLimitRps: 250,
+      burst: 50,
     }),
     // 5 slots / 18ms = 278 rps: the deliberate knee of the play path.
     node('license', 'service', 'DRM License Svc', COL(4), LROW(2, 1), {
@@ -2641,18 +2423,14 @@ const netflix: Topology = {
       hitRate: 0.9,
       queueLimit: 512,
     }),
-    node('cassandra', 'shard', 'Cassandra Ring', COL(4), LROW(3, 1), {
+    node('cassandra', 'db', 'Cassandra Ring', COL(4), LROW(3, 1), {
+      capacity: 12,
       serviceMs: 35,
       serviceCv: 0.6,
       queueLimit: 32,
-      shardCount: 4,
-      shardCapacity: 2,
-      hotKeyFraction: 0,
     }),
-    node('keystone', 'streambroker', 'Keystone Pipeline', COL(3), LROW(4, 1), {
+    node('keystone', 'pubsub', 'Keystone Pipeline', COL(3), LROW(4, 1), {
       serviceMs: 1,
-      partitions: 6,
-      queueLimit: 4000,
     }),
     node('history', 'service', 'Viewing History', COL(4), LROW(4, 1), {
       capacity: 6,
@@ -2666,8 +2444,10 @@ const netflix: Topology = {
       serviceCv: 0.5,
       queueLimit: 96,
     }),
-    node('recsbh', 'bulkhead', 'Recs Bulkhead', COL(3), LROW(5, 2), {
-      bulkheadMax: 10,
+    node('recsbh', 'service', 'Recs Gate', COL(3), LROW(5, 2), {
+      capacity: 10,
+      serviceMs: 2,
+      queueLimit: 32,
     }),
     node('recs', 'service', 'Personalisation', COL(4), LROW(5, 2), {
       capacity: 8,
@@ -2874,14 +2654,11 @@ const spotify: Topology = {
       serviceCv: 0.4,
       queueLimit: 64,
     }),
-    node('es', 'searchindex', 'Search Index (ES)', COL(3), LROW(2, 1), {
+    node('es', 'db', 'Search Index (ES)', COL(3), LROW(2, 1), {
       capacity: 12,
       serviceMs: 8,
       serviceCv: 0.5,
       queueLimit: 128,
-      indexMs: 60,
-      indexLagMs: 2000,
-      readFraction: 0.95,
     }),
     node('playlist', 'service', 'Playlist Service', COL(2), LROW(3, 1), {
       capacity: 24,
@@ -2943,10 +2720,8 @@ const spotify: Topology = {
       rps: 600,
       timeoutMs: 1500,
     }),
-    node('kafka', 'streambroker', 'Event Delivery', COL(1), LROW(6, 3), {
+    node('kafka', 'pubsub', 'Event Delivery', COL(1), LROW(6, 3), {
       serviceMs: 1,
-      partitions: 8,
-      queueLimit: 6000,
     }),
     node('royalty', 'service', 'Royalty & Reporting', COL(2), LROW(6, 3), {
       capacity: 12,
@@ -2954,18 +2729,11 @@ const spotify: Topology = {
       serviceCv: 0.4,
       queueLimit: 128,
     }),
-    node('analytics', 'timeseriesdb', 'Analytics Store', COL(2), LROW(7, 3), {
+    node('analytics', 'db', 'Analytics Store', COL(2), LROW(7, 3), {
       capacity: 16,
       serviceMs: 1.5,
       serviceCv: 0.4,
       queueLimit: 1024,
-      // Pure ingest: appends only. A range query costs ~80x an append
-      // here, and with the broker delivering at most `partitions`
-      // messages at once, per-delivery cost is exactly what sets a
-      // consumer group's ceiling. Keeping this group cheap is what lets
-      // it keep up while Royalty, at 6ms per message, falls behind.
-      rangeQueryFraction: 0,
-      rangeQueryMs: 120,
     }),
   ],
   edges: [
@@ -3114,9 +2882,8 @@ const twitter: Topology = {
     // A miss rebuilds the timeline the slow way: fetch the follow graph
     // and the tweets, join both. This is also the shape of the hybrid
     // celebrity merge, so it stands in for that too.
-    node('tweetstore', 'shard', 'Tweet Store (sharded)', COL(4), ROW(1), {
-      shardCount: 4,
-      shardCapacity: 4,
+    node('tweetstore', 'db', 'Tweet Store', COL(4), ROW(1), {
+      capacity: 16,
       serviceMs: 12,
       serviceCv: 0.6,
       queueLimit: 64,
@@ -3136,12 +2903,9 @@ const twitter: Topology = {
       serviceCv: 0.5,
       queueLimit: 64,
     }),
-    node('searchindex', 'searchindex', 'Earlybird Index', COL(4), ROW(0), {
+    node('searchindex', 'db', 'Earlybird Index', COL(4), ROW(0), {
       capacity: 8,
       serviceMs: 8,
-      indexMs: 60,
-      indexLagMs: 800,
-      readFraction: 0.6,
       queueLimit: 64,
     }),
     // Write row: the expensive half. A per-account limiter (write rate
@@ -3161,10 +2925,8 @@ const twitter: Topology = {
       serviceCv: 0.5,
       queueLimit: 64,
     }),
-    node('firehose', 'streambroker', 'Tweet Firehose', COL(3), LROW(3, 1), {
+    node('firehose', 'pubsub', 'Tweet Firehose', COL(3), LROW(3, 1), {
       serviceMs: 1,
-      partitions: 8,
-      queueLimit: 4000,
     }),
     // The fanout group. 120ms per delivery is the follower-list lookup
     // plus one timeline insert per follower, priced as one job. The
@@ -3337,11 +3099,9 @@ const stripe: Topology = {
       timeoutMs: 1500,
       queueLimit: 64,
     }),
-    node('breaker', 'breaker', 'Network Breaker', COL(5), ROW(0), {
-      errorThreshold: 0.5,
-      windowMs: 5000,
-      openMs: 4000,
-      halfOpenProbes: 3,
+    node('breaker', 'ratelimiter', 'Network Gate', COL(5), ROW(0), {
+      rateLimitRps: 150,
+      burst: 30,
     }),
     // The slow external truth: a card authorisation is a quarter of a
     // second somewhere you do not control and cannot blindly retry.
@@ -3358,19 +3118,13 @@ const stripe: Topology = {
       serviceCv: 0.5,
       queueLimit: 96,
     }),
-    node('events', 'streambroker', 'Payment Events', COL(4), ROW(3), {
+    node('events', 'pubsub', 'Payment Events', COL(4), ROW(3), {
       serviceMs: 1,
-      partitions: 4,
-      queueLimit: 4000,
     }),
     // Webhooks, per the docs: redeliver with backoff, then give up
     // onto a shelf you can inspect, because merchant endpoints fail.
-    node('webhookq', 'retryqueue', 'Webhook Delivery', COL(5), ROW(3), {
-      capacity: 8,
+    node('webhookq', 'queue', 'Webhook Delivery', COL(5), ROW(3), {
       serviceMs: 3,
-      serviceCv: 0.3,
-      timeoutMs: 1000,
-      retries: 2,
       queueLimit: 2000,
     }),
     node('merchantep', 'service', 'Merchant Endpoints', COL(6), ROW(3), {
@@ -3380,10 +3134,10 @@ const stripe: Topology = {
       errorRate: 0.12,
       queueLimit: 64,
     }),
-    node('tsdb', 'timeseriesdb', 'Billing Metrics', COL(5), LROW(4, 1), {
+    node('tsdb', 'db', 'Billing Metrics', COL(5), LROW(4, 1), {
       capacity: 16,
-      rangeQueryFraction: 0.02,
-      rangeQueryMs: 120,
+      serviceMs: 2,
+      queueLimit: 512,
     }),
     // Payouts arrive on a clock, not on demand, and share the ledger
     // primary with live charges: watch its queue breathe every 25s.
