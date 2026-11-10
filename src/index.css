@@ -1,0 +1,2337 @@
+/* ==========================================================================
+   Archisys design system — foundation layer
+
+   IDENTITY: warm paper. This is a teaching tool for a student who has never
+   seen a queueing curve. It should read like a well-set textbook figure —
+   open, calm, legible — not like a monitoring console.
+
+   This file owns, and is the SOLE owner of:
+     - the six-step type scale
+     - the seven-step 4px spacing scale
+     - every colour token, including the 33 per-kind colour trios
+     - the shared primitives: .panel .label .num .btn .slider .field .scroll,
+       status classes, the focus ring, scrollbars, reduced motion
+
+   Rules enforced here:
+     - Six font sizes only: 11 / 12 / 14 / 16 / 22 / 34. Nothing else.
+       No half-pixel sizes, ever.
+     - Three weights only: 450 (body), 550 (emphasis/labels), 650 (numbers).
+     - Spacing is 4 / 8 / 12 / 16 / 20 / 28 / 40. No other value.
+     - Radii are 6 / 8 / 10 / 14 / 999. A radius is never combined with a
+       single-side border.
+     - Every number renders in --mono with tabular-nums.
+     - No gradients, no backdrop-filter, no glow, no serif headline, no
+       coloured shadow. Motion is 120-200ms on the shared tokens, and an
+       entrance animation exists only for a surface the user just summoned
+       (a panel toggled open, a node dropped, a selection made), never for
+       content that is simply present.
+
+   COLOUR DERIVATION. Every colour in this file was generated in OKLCH and
+   its contrast measured numerically, not chosen by eye. OKLCH is used rather
+   than HSL because HSL lightness is not perceptual — a 60% blue and a 60%
+   yellow look nothing alike, which is precisely how a 14-swatch palette ends
+   up looking like 33 unrelated stickers. In OKLCH, holding L and C fixed and
+   varying only H yields swatches of genuinely equal weight.
+
+   No component-specific class may be defined in this file.
+   ========================================================================== */
+
+/* ==========================================================================
+   Bundled webfont: Caveat.
+
+   Self-hosted rather than linked from Google Fonts, so the page makes no
+   third-party request and nothing about who is reading leaves this origin.
+
+   Licensed under the SIL Open Font License 1.1, which is NOT the repository's
+   MIT licence: the full terms travel with the binary in
+   public/fonts/Caveat/OFL.txt, as the licence requires. Verified from the
+   font's own embedded metadata rather than from a secondary source.
+
+   The latin subset only (the unicode-range below is Google's own for that
+   block), which is 75KB. `font-display: swap` because a handwriting face is
+   decoration on top of an annotation that is perfectly readable in the
+   fallback; blocking text on it would be the wrong trade.
+
+   Canvas measures text through textMetrics, which caches widths. Canvas
+   already calls resetTextMetrics from a document.fonts.ready handler, so the
+   notes re-wrap once this lands rather than keeping widths measured against
+   the fallback face.
+   ========================================================================== */
+
+@font-face {
+  font-family: 'Caveat';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/Caveat/Caveat-latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
+}
+
+:root {
+  /* ------------------------------------------------------------------------
+     Type scale — six steps, all integers.
+     Nothing outside this table may set a font-size anywhere in the codebase.
+
+       T1  11  550  uppercase  labels, eyebrows, axis captions
+       T2  12  450             secondary prose, help text, tick values
+       T3  14  450             body default, node name, list rows  [BASE]
+       T4  16  650  mono       workhorse numeric: node primary, stat values
+       T5  22  650  mono       chart header readouts, selected node primary
+       T6  34  650  mono       exactly one: the system p99
+
+     The base step is 14px rather than the 13px a dense professional tool
+     would use. This is read, not scanned.
+     ------------------------------------------------------------------------ */
+  --fs-label: 11px;
+  --fs-sm: 12px;
+  --fs-base: 14px;
+  --fs-num: 16px;
+  --fs-lg: 22px;
+  --fs-hero: 34px;
+
+  /* Tracking paired to each step. Small text opens up, large text tightens. */
+  --tr-label: 0.06em;
+  --tr-sm: 0;
+  --tr-base: -0.005em;
+  --tr-num: -0.01em;
+  --tr-lg: -0.018em;
+  --tr-hero: -0.025em;
+
+  /* Line heights. Generous for prose; numeric steps are set tight because a
+     live readout's box must not change height as its digits change. */
+  --lh-label: 1.25;
+  --lh-sm: 1.5;
+  --lh-base: 1.6;
+  --lh-prose: 1.65;
+  --lh-num: 1.15;
+  --lh-hero: 1;
+
+  /* Three weights. 450 reads lighter and friendlier than 500 on a light
+     background, where type appears optically heavier than on a dark one. */
+  --fw-body: 450;
+  --fw-med: 550;
+  --fw-num: 650;
+
+  /* ------------------------------------------------------------------------
+     Spacing — strict 4px grid, seven tokens.
+
+       4   number-to-unit gap, icon-to-text, tick clearance
+       8   compact control padding, stacked legend rows
+       12  list row padding, label-to-control gap
+       16  panel padding on narrow rails
+       20  panel padding, default
+       28  between sections within a panel
+       40  between top-level bar regions only
+     ------------------------------------------------------------------------ */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-7: 28px;
+  --sp-10: 40px;
+
+  /* Radii. Soft enough to feel welcoming, tight enough to stay adult.
+       2    small filled marks (8px swatches), where 6 would read as a circle
+       6    inputs, small chips, meter troughs
+       8    buttons
+       10   panels, nodes
+       14   large containers, modals
+       999  pills and circular thumbs */
+  /* A small filled mark — an 8px legend swatch or band sample — where the
+     6px --r-sm would round it almost to a circle and stop reading as a
+     square. Proportional to the mark, not to a panel. */
+  --r-mark: 2px;
+  --r-sm: 6px;
+  --r-btn: 8px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-pill: 999px;
+  --r-node: 10px;
+
+  /* Border weights. Hairline for quiet dividers, 1.5px for a node outline
+     that must hold its own against the canvas. */
+  --bw: 1px;
+  --bw-strong: 1.5px;
+
+  /* Width a thin scrollbar occupies inside a scrolling panel.
+
+     MEASURED, not assumed: offsetWidth - clientWidth on .ins-scroll is 8px
+     with `scrollbar-width: thin`. Anything that must line up with the
+     CONTENT of a scrolling column, rather than with the column's box, has to
+     add this — otherwise it sits exactly this far out, which is how the
+     inspector's footer button ended up 8px past every value above it. */
+  --scrollbar-w: 8px;
+
+  /* Slider geometry. The track height and thumb diameter are each repeated
+     across two vendor-prefixed pseudo-elements, and the thumb's centring
+     offset and the scale rail's inset are both DERIVED from them. Naming
+     them once is what stops the four copies drifting apart. */
+  /* The phone tab bar's height. On :root rather than on .app-body because
+     the tab bar is a SIBLING of the body, not a descendant, and the stage's
+     bottom padding and every sheet's offset both read it. */
+  --tabbar-h: 56px;
+
+  --track-h: 6px;
+  --thumb: 18px;
+
+  /* Elevation. Neutral, low-opacity, never coloured, never glowing.
+     Shadow carries a warm-neutral hue at very low alpha so it sits on paper
+     rather than looking like grey dirt. */
+  --shadow-sm: 0 1px 2px rgba(60, 50, 40, 0.16);
+  --shadow-md: 0 1px 2px rgba(60, 50, 40, 0.05), 0 4px 10px rgba(60, 50, 40, 0.07);
+  --shadow-lg: 0 2px 4px rgba(60, 50, 40, 0.05), 0 12px 28px rgba(60, 50, 40, 0.1);
+
+  /* The highlight a light sweep carries across a surface. Warm-neutral like
+     the shadows, and a DARK wash here because the light theme's chrome is
+     near white: a white sheen on white is invisible. */
+  --sheen: rgba(60, 50, 40, 0.14);
+
+  /* Scrim behind a temporary surface. The same warm-neutral as the shadows,
+     kept deliberately light: it marks the layer above as active without
+     hiding the running simulation, which is the thing the student opened
+     that layer to understand. */
+  --scrim: rgba(60, 50, 40, 0.28);
+
+  /* The 1px inset highlight along the top edge of a button.
+     A literal white was fine while there was one theme; on a dark ground the
+     same value draws a bright line across the top of every control, which is
+     the classic tell of a light theme wearing dark paint. Named so each theme
+     can say what a lit edge means on its own surface. */
+  --bevel: rgba(255, 255, 255, 0.9);
+  --bevel-on-accent: rgba(255, 255, 255, 0.16);
+  /* The 1px inset line along a button's BOTTOM edge.
+     A lit top edge is what gives a control its dimension, but on a near-white
+     surface white-on-white says nothing: light mode reads the raised edge from
+     the shaded underside instead, which is the same physics seen from the
+     other side. Dark mode leaves this off, where the bright top edge already
+     carries it. */
+  --bevel-under: rgba(60, 50, 40, 0.13);
+
+  /* All motion, 120-200ms: interactive transitions, the panel slides in
+     App.css, and the state-change colour eases. Nothing animates longer
+     than --dur-slow. */
+  --dur-fast: 120ms;
+  --dur-base: 160ms;
+  --dur-slow: 200ms;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 0.84, 0.44, 1);
+
+  /* ------------------------------------------------------------------------
+     Neutral ramp — warm paper.
+     Hue 75 (warm yellow-orange) at very low chroma. Warmth is what separates
+     "paper" from "clinical white"; the chroma is kept under 0.014 so it never
+     reads as beige or as a colour cast.
+
+     Note --surface is LIGHTER than --bg. Panels lift off the canvas toward
+     white rather than darkening toward grey, which is what makes the layout
+     feel open instead of boxed-in.
+     ------------------------------------------------------------------------ */
+  --bg: #faf7f3; /* app canvas / ground */
+  --surface: #fffdfa; /* chrome panels: palette, inspector, metrics */
+  --surface-2: #f7f3ee; /* inputs, recessed rows, meter troughs */
+  --surface-3: #f0ece5; /* pressed states, table header bands */
+  --border: #e8e2da; /* hairline divider — 1.20:1 on bg, deliberately quiet */
+  --border-strong: #8e8a83; /* button and input outline — 3.21:1 on bg */
+
+  /* Canvas rules. Both must recede almost to invisibility: a ruled field
+     reads as a workspace, a loud one competes with the diagram. */
+  --grid-line: #f1ece6; /* 32px hairline rules — 1.10:1 on bg */
+  --grid-major: #e7e2dc; /* every 4th rule, 128px — 1.21:1 on bg */
+  --grid-dot: var(--grid-line); /* retained alias */
+
+  /* Neutral line ramp for edges, ports, arrowheads and neutral chart series.
+     Chart series are distinguished by weight and lightness, never by hue. */
+  --line: #cfc8bf; /* idle edge */
+  --line-2: #b3aba1; /* hover edge, arrowheads */
+  --line-3: #948c82; /* axis rules */
+  --line-4: #6f6a63; /* p50 series, sparkline stroke */
+  --line-5: #545049;
+  --track: #ece7e0; /* meter troughs */
+
+  /* Categorical hues, used ONLY to separate failure reasons in the
+     breakdown, where five causes must be told apart at a glance.
+     All measured >= 4.5:1 on --surface. Rust is packet loss: 7.91:1 on
+     --surface, and 0.143 OKLab from its nearest band (--danger-mark,
+     --line-5), clear of --ok-mark so a failure never reads as healthy. */
+  --cat-violet: #7a4bab;
+  --cat-blue: #1f6099;
+  --cat-rust: #962905;
+
+  /* ------------------------------------------------------------------------
+     Text ramp. Cool-leaning ink (hue 264) against warm paper — the slight
+     temperature opposition is what makes the text read as ink on stock
+     rather than as a wash of the same colour.
+
+     Measured, on --bg / --surface / --surface-2 / --surface-3:
+       --text        14.60 / 15.35 / 14.11 / 13.24
+       --text-dim     6.71 /  7.06 /  6.49 /  6.08
+       --text-faint   5.32 /  5.59 /  5.14 /  4.82
+     ALL THREE pass AA body text (4.5:1) on ALL FOUR surfaces, and on --track. --text-faint
+     was darkened specifically so it is never a trap: there is no surface in
+     this app on which it silently fails.
+     ------------------------------------------------------------------------ */
+  --text: #1e242e;
+  --text-dim: #525862;
+  --text-faint: #626770;
+
+  /* On a saturated fill (accent, danger) text is always white. */
+  --text-on-fill: #ffffff;
+
+  /* The slider thumb, and the select chevron drawn in --text-faint. A data
+     URI cannot read a custom property, so each theme carries its own. */
+  --thumb-fill: #ffffff;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23626770' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+
+  /* ------------------------------------------------------------------------
+     Accent — a single warm-leaning indigo. Four permitted uses, all meaning
+     "you did this": the focus ring, selection, the slider fill, .btn-primary.
+     A data series may never wear the selection hue.
+
+     Measured: --accent as text on --bg 5.78:1 (AA body).
+               white on --accent 6.17:1, on hover 7.61:1, on press 9.32:1.
+               --accent against the palest kind fill 5.42:1, so the selection
+               ring is unmistakable on every node in the system.
+     ------------------------------------------------------------------------ */
+  --accent: #325cbd;
+  --accent-hover: #2a4fa5;
+  --accent-press: #23438c;
+  --accent-fg: #ffffff;
+  --accent-soft: #e3edff; /* tinted chip background; --text on it = 13.23:1 */
+  --accent-ink: #2d5277; /* text on --accent-soft = 6.90:1 */
+  --accent-ring: rgba(50, 92, 189, 0.32); /* focus halo, flat not glowing */
+  --accent-soft-hover: #d7e5ff; /* hover on a pressed toggle; --accent-ink on it = 6.39:1 */
+
+  /* ------------------------------------------------------------------------
+     Semantic metric states.
+
+     Amber on a light background is the classic accessibility failure, so the
+     health colours are SPLIT BY ROLE rather than pretending one value works
+     for both:
+
+       --ok / --warn / --danger        TEXT. >= 4.5:1 on every surface AND on
+                                       every one of the 14 kind fills.
+       --ok-mark / --warn-mark /       FILLS, meter bars, strokes, dots.
+       --danger-mark                   >= 3:1 on --bg. Brighter and more
+                                       saturated, never used as text.
+
+     Measured as text, worst case across all four surfaces (--surface-3):
+       ok 4.85, warn 5.01, danger 4.74. On --bg: ok 5.35, warn 5.52,
+       danger 5.22. All clear AA on every surface in the app.
+     Measured as marks on --bg: ok 3.46, warn 3.24, danger 4.45.
+     --warn is a dark bronze, not a yellow. A yellow that passes 4.5:1 on
+     paper does not exist; this is the honest answer.
+     ------------------------------------------------------------------------ */
+  --ok: #127638;
+  --warn: #945500;
+  --danger: #c52b30;
+
+  --ok-mark: #319751;
+  --warn-mark: #c57800;
+  --danger-mark: #d73337;
+
+  --ok-soft: #e6f4ea;
+  --warn-soft: #fbeedb;
+  --danger-soft: #fdeceb;
+  --danger-press: #a8232a; /* white on it = 7.14:1 */
+  --danger-ring: rgba(197, 43, 48, 0.28);
+
+  /* ==========================================================================
+     PER-KIND COLOUR SYSTEM — the heart of the redesign.
+
+     DERIVATION RULE. Each of the 33 kinds owns exactly ONE hue angle. The
+     three roles are then generated at a FIXED lightness and chroma that is
+     identical for all 33 kinds, so only the hue ever differs:
+
+       --kind-*-fill   OKLCH  L 0.958  C 0.021   node body background
+       --kind-*-line   OKLCH  L 0.740  C 0.110   internal rule / accent stroke
+       --kind-*-stroke OKLCH  L 0.600  C 0.125   the node OUTLINE
+       --kind-*-ink    OKLCH  L 0.430  C 0.075   glyph and text on the fill
+
+     Chroma is clamped per-hue to the sRGB gamut boundary where needed (yellow
+     and cyan run out of gamut before blue does). Without that clamp the
+     browser silently clips the colour and the swatch drifts off-rule, which
+     is a common and invisible way a systematic palette stops being systematic.
+
+     Because L and C are constant, all 33 have equal visual weight.
+
+     HUE FAMILIES — related kinds sit on adjacent hues, so a student learns
+     the neighbourhood as well as the individual piece. All 33 kinds are
+     generated from the rule above; none falls back to grey.
+
+       traffic      client 295, lb 250, cdn 190, edgecompute 175
+       compute      service 262, worker 274, transcoder 286,
+                    queue 310, retryqueue 322   (the two queues sit together)
+       data         shard 206, replica 218, db 230   cyan-blues
+                    cache 70, writebehind 50         amber (deliberate
+                      outliers: the two stores that behave like edge, and
+                      being the warm ones makes them instantly findable)
+       stores       vectordb 152, searchindex 160, timeseriesdb 168,
+                    graphdb 184, objectstore 196, coldstorage 214
+                      a green-teal shelf, held clear of the core data blues
+       messaging    streambroker 334, pubsub 346, websocket 358, lambda 12
+                    cron 100  (a clock, not a message — olive with control)
+       control      autoscaler 118, loadshedder 132, ratelimiter 145
+                    breaker 25, bulkhead 38   (the two hard stops, in red)
+                    region 340, apigateway 240, sidecar 88
+
+     ACCESSIBILITY, measured on every one of the 33 fills:
+       --text          13.69 - 13.94  (AA, AAA)
+       --text-dim       6.29 -  6.40  (AA)
+       --ok             4.75 -  4.83  (AA)
+       --warn           5.18 -  5.28  (AA)
+       --danger         4.90 -  4.99  (AA)
+       ink on own fill  6.89 -  7.48  (AA)
+     Every health colour clears AA on every kind fill. This was the single
+     constraint most likely to break the scheme; it holds with margin, which
+     is why health can be shown as text directly on a coloured node.
+     --kind-*-stroke measures 3.47 - 3.96 on --bg: AA for graphics, all 33.
+     A range this tight across 33 swatches is what makes them read as ONE
+     family rather than 33 unrelated stickers.
+     ========================================================================== */
+
+  /* Traffic — violets through to the edge */
+  --kind-client-fill: #f2effe;
+  --kind-client-line: #b09de9;
+  --kind-client-stroke: #866fc2;
+  --kind-client-ink: #534775;
+
+  --kind-lb-fill: #e7f3ff;
+  --kind-lb-line: #73b0ee;
+  --kind-lb-stroke: #3e84c8;
+  --kind-lb-ink: #2d5277;
+
+  --kind-cdn-fill: #e2f6f4;
+  --kind-cdn-line: #41c1ba;
+  --kind-cdn-stroke: #00948e;
+  --kind-cdn-ink: #005d59;
+
+  --kind-edgecompute-fill: #e3f6f0;
+  --kind-edgecompute-line: #51c1a7;
+  --kind-edgecompute-stroke: #00967c;
+  --kind-edgecompute-ink: #115d4d;
+
+  /* Compute — blues, with the two queues on the violet side */
+  --kind-service-fill: #eaf2ff;
+  --kind-service-line: #85abf0;
+  --kind-service-stroke: #567fca;
+  --kind-service-ink: #394f79;
+
+  --kind-worker-fill: #edf1ff;
+  --kind-worker-line: #95a5f0;
+  --kind-worker-stroke: #6a79ca;
+  --kind-worker-ink: #434c79;
+
+  --kind-queue-fill: #f5eefc;
+  --kind-queue-line: #c097df;
+  --kind-queue-stroke: #9769b8;
+  --kind-queue-ink: #5c446f;
+
+  --kind-retryqueue-fill: #f8edfa;
+  --kind-retryqueue-line: #cc93d4;
+  --kind-retryqueue-stroke: #a365ac;
+  --kind-retryqueue-ink: #634168;
+
+  --kind-transcoder-fill: #efefff;
+  --kind-transcoder-line: #a5a0ed;
+  --kind-transcoder-stroke: #7b73c7;
+  --kind-transcoder-ink: #4c4977;
+
+  /* Data — cyan-blues, cache the one warm outlier */
+  --kind-db-fill: #e4f4fd;
+  --kind-db-line: #57b8e3;
+  --kind-db-stroke: #008cb9;
+  --kind-db-ink: #185771;
+
+  --kind-cache-fill: #fbefe2;
+  --kind-cache-line: #d79e59;
+  --kind-cache-stroke: #af7112;
+  --kind-cache-ink: #6a481c;
+
+  --kind-writebehind-fill: #feede5;
+  --kind-writebehind-line: #e3966a;
+  --kind-writebehind-stroke: #ba6734;
+  --kind-writebehind-ink: #704328;
+
+  --kind-replica-fill: #e2f5fb;
+  --kind-replica-line: #48bbd9;
+  --kind-replica-stroke: #008fab;
+  --kind-replica-ink: #07596b;
+
+  --kind-shard-fill: #e2f6f8;
+  --kind-shard-line: #3fbecd;
+  --kind-shard-stroke: #00919e;
+  --kind-shard-ink: #005b64;
+
+  /* Specialised stores — a cool green-teal shelf, distinct from core data */
+  --kind-objectstore-fill: #e2f6f6;
+  --kind-objectstore-line: #3ec0c1;
+  --kind-objectstore-stroke: #009394;
+  --kind-objectstore-ink: #005c5d;
+
+  --kind-searchindex-fill: #e6f6ec;
+  --kind-searchindex-line: #66c093;
+  --kind-searchindex-stroke: #229666;
+  --kind-searchindex-ink: #245c41;
+
+  --kind-timeseriesdb-fill: #e4f6ee;
+  --kind-timeseriesdb-line: #5bc19d;
+  --kind-timeseriesdb-stroke: #009772;
+  --kind-timeseriesdb-ink: #1a5d48;
+
+  --kind-graphdb-fill: #e3f6f3;
+  --kind-graphdb-line: #46c1b3;
+  --kind-graphdb-stroke: #009487;
+  --kind-graphdb-ink: #045d54;
+
+  --kind-vectordb-fill: #e7f5ea;
+  --kind-vectordb-line: #73bf88;
+  --kind-vectordb-stroke: #3a955a;
+  --kind-vectordb-ink: #2d5c3b;
+
+  --kind-coldstorage-fill: #e2f5fa;
+  --kind-coldstorage-line: #44bcd5;
+  --kind-coldstorage-stroke: #0090a6;
+  --kind-coldstorage-ink: #025a69;
+
+  /* Messaging — magenta-pinks */
+  --kind-streambroker-fill: #fbecf7;
+  --kind-streambroker-line: #d590c8;
+  --kind-streambroker-stroke: #ac619f;
+  --kind-streambroker-ink: #693f61;
+
+  --kind-pubsub-fill: #fcecf4;
+  --kind-pubsub-line: #dd8eb9;
+  --kind-pubsub-stroke: #b45f90;
+  --kind-pubsub-ink: #6d3e58;
+
+  --kind-websocket-fill: #feecf1;
+  --kind-websocket-line: #e38daa;
+  --kind-websocket-stroke: #ba5d80;
+  --kind-websocket-ink: #703d50;
+
+  --kind-lambda-fill: #ffeced;
+  --kind-lambda-line: #e78d98;
+  --kind-lambda-stroke: #be5d6c;
+  --kind-lambda-ink: #733d45;
+
+  --kind-cron-fill: #f4f2e2;
+  --kind-cron-line: #bbac55;
+  --kind-cron-stroke: #928100;
+  --kind-cron-ink: #595019;
+
+  /* Control — greens and olives, with the two hard stops in red */
+  --kind-ratelimiter-fill: #e9f5e9;
+  --kind-ratelimiter-line: #7dbd7f;
+  --kind-ratelimiter-stroke: #4b934f;
+  --kind-ratelimiter-ink: #345b35;
+
+  --kind-loadshedder-fill: #ecf4e6;
+  --kind-loadshedder-line: #91ba6f;
+  --kind-loadshedder-stroke: #638f3a;
+  --kind-loadshedder-ink: #40582b;
+
+  --kind-breaker-fill: #ffecea;
+  --kind-breaker-line: #e88f87;
+  --kind-breaker-stroke: #c05f59;
+  --kind-breaker-ink: #743e3b;
+
+  --kind-bulkhead-fill: #ffede7;
+  --kind-bulkhead-line: #e79277;
+  --kind-bulkhead-stroke: #be6346;
+  --kind-bulkhead-ink: #734031;
+
+  --kind-autoscaler-fill: #f0f3e4;
+  --kind-autoscaler-line: #a5b461;
+  --kind-autoscaler-stroke: #7a8a23;
+  --kind-autoscaler-ink: #4c5522;
+
+  --kind-region-fill: #fcecf6;
+  --kind-region-line: #d98fc1;
+  --kind-region-stroke: #b06098;
+  --kind-region-ink: #6b3f5d;
+
+  --kind-apigateway-fill: #e5f3fe;
+  --kind-apigateway-line: #65b4e9;
+  --kind-apigateway-stroke: #2388c3;
+  --kind-apigateway-ink: #235575;
+
+  --kind-sidecar-fill: #f7f1e2;
+  --kind-sidecar-line: #c8a753;
+  --kind-sidecar-stroke: #9f7b00;
+  --kind-sidecar-ink: #614d17;
+
+  /* ------------------------------------------------------------------------
+     Section annotation tones.
+
+     A section stores a palette INDEX, never a colour (annotations.ts), and
+     this is the palette it indexes. Six tones, each an alias into the
+     per-kind system above rather than new hex: sections restyle with any
+     future retheme of the kind palette for free, and every tone inherits
+     the measured contrast work already done for its source hue. Tone 5 is
+     the neutral, for a section that should group without commenting.
+
+     -fill tints the frame's interior, -line strokes its border, -ink is the
+     label text on the fill.
+     ------------------------------------------------------------------------ */
+  /* Twelve shades round the hue wheel, plus a neutral.
+
+     Every one is an ALIAS of a component kind's trio, never a literal. That
+     is what makes a shade theme-aware for free: the dark palette redefines
+     the kind tokens, so a section picked in light mode arrives in dark mode
+     as the dark version of the same shade rather than as a pale plate nobody
+     can read. It is also why there is no colour picker. An arbitrary hex
+     pinned into a saved design is a colour that cannot follow the theme, and
+     the reason `tone` is an index in the first place.
+
+     Ordered so that adjacent indices are visibly different, rather than by
+     hue, because the picker shows them in a row and two neighbouring blues
+     read as one repeated swatch.
+
+     Contrast is asserted in theme.contrast.test.ts alongside the kinds they
+     alias; measured, the worst ink-on-fill of the set is 6.90:1. */
+  --ann-0-fill: var(--kind-lb-fill);
+  --ann-0-line: var(--kind-lb-stroke);
+  --ann-0-ink: var(--kind-lb-ink);
+
+  --ann-1-fill: var(--kind-searchindex-fill);
+  --ann-1-line: var(--kind-searchindex-stroke);
+  --ann-1-ink: var(--kind-searchindex-ink);
+
+  --ann-2-fill: var(--kind-cache-fill);
+  --ann-2-line: var(--kind-cache-stroke);
+  --ann-2-ink: var(--kind-cache-ink);
+
+  --ann-3-fill: var(--kind-queue-fill);
+  --ann-3-line: var(--kind-queue-stroke);
+  --ann-3-ink: var(--kind-queue-ink);
+
+  --ann-4-fill: var(--kind-pubsub-fill);
+  --ann-4-line: var(--kind-pubsub-stroke);
+  --ann-4-ink: var(--kind-pubsub-ink);
+
+  --ann-5-fill: var(--kind-cdn-fill);
+  --ann-5-line: var(--kind-cdn-stroke);
+  --ann-5-ink: var(--kind-cdn-ink);
+
+  --ann-6-fill: var(--kind-breaker-fill);
+  --ann-6-line: var(--kind-breaker-stroke);
+  --ann-6-ink: var(--kind-breaker-ink);
+
+  --ann-7-fill: var(--kind-cron-fill);
+  --ann-7-line: var(--kind-cron-stroke);
+  --ann-7-ink: var(--kind-cron-ink);
+
+  --ann-8-fill: var(--kind-client-fill);
+  --ann-8-line: var(--kind-client-stroke);
+  --ann-8-ink: var(--kind-client-ink);
+
+  --ann-9-fill: var(--kind-writebehind-fill);
+  --ann-9-line: var(--kind-writebehind-stroke);
+  --ann-9-ink: var(--kind-writebehind-ink);
+
+  --ann-10-fill: var(--kind-vectordb-fill);
+  --ann-10-line: var(--kind-vectordb-stroke);
+  --ann-10-ink: var(--kind-vectordb-ink);
+
+  --ann-11-fill: var(--kind-transcoder-fill);
+  --ann-11-line: var(--kind-transcoder-stroke);
+  --ann-11-ink: var(--kind-transcoder-ink);
+
+  /* The neutral. Last so it is the far end of the row, and aliased to the
+     surface tokens rather than to a kind: a section that should not claim a
+     colour at all still has to be one of the choices. */
+  --ann-12-fill: var(--surface-2);
+  --ann-12-line: var(--line-3);
+  --ann-12-ink: var(--text-dim);
+
+  /* ------------------------------------------------------------------------
+     Type stacks. System-first: the OS UI font is the one a student's eye is
+     already calibrated to, it needs no network request, and it never causes
+     a layout shift. No web font is loaded.
+     ------------------------------------------------------------------------ */
+  --sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Inter, Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --mono:
+    ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono',
+    monospace;
+
+  /* Annotation faces.
+
+     A note is commentary ABOUT the diagram, not part of it, and a different
+     face is what says so at a glance. These are offered per note; the default
+     stays --sans.
+
+     All three are system-stack only, with no webfont fetch. A hand-drawn face
+     is decoration, and blocking first paint on a font download to get it
+     would be a poor trade on a page whose point is a live simulation. Each
+     stack ends in a generic family that always resolves, so a machine with
+     none of the named faces still renders something sane rather than falling
+     back to the UI sans and quietly losing the distinction. */
+  --hand: 'Caveat', 'Segoe Print', 'Bradley Hand', Chalkboard, 'Comic Neue', cursive;
+  --serif: ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+
+  color-scheme: light;
+}
+
+/* ==========================================================================
+   DARK THEME
+   ==========================================================================
+
+   Applied by [data-theme='dark'] on the root element, and by the media query
+   below for anyone whose OS asks for dark and who has expressed no preference
+   of their own. The two are kept separate on purpose: an explicit choice must
+   beat the OS, or the toggle appears broken to someone whose system is set the
+   other way.
+
+   Only colour is redefined. Type scale, spacing, radii and timing are theme
+   independent and stay in :root, so there is exactly one place to change them.
+
+   HOW THE PER-KIND COLOURS WERE PRODUCED. The 33 component kinds carry four
+   colours each. They are not hand-written: tools/derive-dark.ts maps every
+   light value into OKLCH, holds the hue, and re-targets lightness and chroma
+   per role. OKLCH rather than HSL because HSL's lightness is not perceptual,
+   so one lightness target across 33 hues yields glaring yellows and sunken
+   blues; in OKLCH a single target per role holds evenly across the wheel.
+   That keeps a cache node recognisably "the amber one" in both themes.
+
+   Every pair is verified, not eyeballed: src/theme.contrast.test.ts recomputes
+   the ratios from this file and fails the suite if any text pair drops below
+   WCAG AA. AGENTS.md requires the ratio to be computed rather than estimated,
+   and a palette this size cannot be checked by hand.
+   -------------------------------------------------------------------------- */
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Ground and chrome. Warm-tinted neutrals rather than a cold blue-grey, so
+     the dark theme reads as the same product as the warm-paper light one. */
+  --bg: #16151a;
+  --surface: #1d1c22;
+  --surface-2: #25242b;
+  --surface-3: #2f2e36;
+  --border: #302f38; /* 1.37:1 on bg, matching the light theme's quiet hairline */
+  --border-strong: #6a6878; /* button and input outline — 3.11:1 on surface */
+
+  --grid-line: #1e1d23; /* 1.08:1 on bg */
+  --grid-major: #26252c; /* 1.19:1 on bg */
+  --grid-dot: var(--grid-line);
+
+  --line: #4a4855;
+  --line-2: #615f6e;
+  --line-3: #807d8c;
+  --line-4: #a29fae;
+  --line-5: #c4c1cf;
+  --track: #2b2a32;
+
+  /* Text ramp. Ratios on --bg / --surface / --surface-3:
+       --text        15.23 / 14.19 / 11.25
+       --text-dim     7.52 /  7.01 /  5.56
+       --text-faint   6.27 /  5.84 /  4.63
+     All three clear AA on every surface, --track and the soft plates.
+     --text-faint was 4.0:1 on --surface-3 before it was lifted. */
+  --text: #eceaf2;
+  --text-dim: #a8a5b4;
+  --text-faint: #9996a5;
+  /* Ink used ON a saturated fill, so it inverts to the dark ground. */
+  --text-on-fill: #16151a;
+  --thumb-fill: #eceaf2;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239996a5' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+
+  --cat-violet: #b491dd;
+  --cat-blue: #78aee0;
+  /* 8.05:1 on --surface, 0.133 OKLab from its nearest band (--warn-mark). */
+  --cat-rust: #fe987c;
+
+  /* Accent. Lightened until it carries text on the dark ground: 6.59:1 on
+     --bg, where the light theme's blue would have been 2.4:1 and unreadable. */
+  --accent: #6f9bf0;
+  --accent-hover: #87acf5;
+  --accent-press: #5b86dc;
+  --accent-fg: #16151a;
+  --accent-soft: #1b2740;
+  --accent-ink: #a9c6ff; /* on --accent-soft = 8.65:1 */
+  --accent-ring: rgba(111, 155, 240, 0.38);
+  --accent-soft-hover: #223150; /* --accent-ink on it = 7.52:1 */
+
+  /* Status. Each clears 4.5:1 on all four surfaces and on --track, and each
+     -soft plate carries its own ink above 4.5:1. */
+  --ok: #4ac06e;
+  --warn: #d79a2b;
+  --danger: #f66a6f;
+
+  --ok-mark: #3fae61;
+  --warn-mark: #c98a1c;
+  --danger-mark: #e2565c;
+
+  --ok-soft: #16301f;
+  --warn-soft: #332616;
+  --danger-soft: #3a1d1f;
+  --danger-press: #e0585d; /* --text-on-fill on it = 4.94:1 */
+  --danger-ring: rgba(246, 106, 111, 0.38);
+
+  /* Shadows read as depth on light and as noise on dark, so they become a
+     near-black spread that darkens the ground under a panel instead of a
+     grey haze over it. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.36), 0 4px 10px rgba(0, 0, 0, 0.44);
+  --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.36), 0 12px 28px rgba(0, 0, 0, 0.52);
+  --scrim: rgba(0, 0, 0, 0.56);
+  /* Inverted for the dark ground: a light wash, where the light theme uses
+     a dark one. */
+  --sheen: rgba(255, 255, 255, 0.16);
+
+  /* A lit edge on a dark surface is a faint lift, not a white line. At the
+     light theme's 0.9 this reads as a glowing seam across every control. */
+  --bevel: rgba(255, 255, 255, 0.07);
+  --bevel-on-accent: rgba(255, 255, 255, 0.14);
+  /* The lit top edge already reads on a dark surface, so no shaded underside. */
+  --bevel-under: transparent;
+
+  /* Per-kind colours, derived. See the note above. */
+  --kind-client-fill: #261e3a;
+  --kind-client-line: #7154b2;
+  --kind-client-stroke: #ac8ff9;
+  --kind-client-ink: #d4c7ff;
+  --kind-lb-fill: #0d263c;
+  --kind-lb-line: #056bb8;
+  --kind-lb-stroke: #50a9ff;
+  --kind-lb-ink: #a9d6ff;
+  --kind-cdn-fill: #002c29;
+  --kind-cdn-line: #00817b;
+  --kind-cdn-stroke: #00beb7;
+  --kind-cdn-ink: #90e3dc;
+  --kind-edgecompute-fill: #002c23;
+  --kind-edgecompute-line: #008265;
+  --kind-edgecompute-stroke: #00c19f;
+  --kind-edgecompute-ink: #97e3cd;
+  --kind-service-fill: #15243c;
+  --kind-service-line: #3865ba;
+  --kind-service-stroke: #6ea3ff;
+  --kind-service-ink: #b5d2ff;
+  --kind-worker-fill: #1c223c;
+  --kind-worker-line: #515ebb;
+  --kind-worker-stroke: #889bff;
+  --kind-worker-ink: #c0ceff;
+  --kind-queue-fill: #2b1d37;
+  --kind-queue-line: #824da6;
+  --kind-queue-stroke: #c287ec;
+  --kind-queue-ink: #e1c3fa;
+  --kind-retryqueue-fill: #2f1b33;
+  --kind-retryqueue-line: #8f4799;
+  --kind-retryqueue-stroke: #d182dc;
+  --kind-retryqueue-ink: #ebc0f1;
+  --kind-transcoder-fill: #22203c;
+  --kind-transcoder-line: #6558b7;
+  --kind-transcoder-stroke: #9e94ff;
+  --kind-transcoder-ink: #cbcaff;
+  --kind-db-fill: #022839;
+  --kind-db-line: #0075ab;
+  --kind-db-stroke: #00b4ee;
+  --kind-db-ink: #99dcfc;
+  --kind-cache-fill: #341f03;
+  --kind-cache-line: #9c5500;
+  --kind-cache-stroke: #e09112;
+  --kind-cache-ink: #f4c897;
+  --kind-writebehind-fill: #381b0c;
+  --kind-writebehind-line: #a74900;
+  --kind-writebehind-stroke: #ef8443;
+  --kind-writebehind-ink: #fdc2a1;
+  --kind-replica-fill: #002a35;
+  --kind-replica-line: #007aa0;
+  --kind-replica-stroke: #00b8dd;
+  --kind-replica-ink: #92def5;
+  --kind-shard-fill: #002b2f;
+  --kind-shard-line: #007e92;
+  --kind-shard-stroke: #00bbcd;
+  --kind-shard-ink: #8fe1eb;
+  --kind-objectstore-fill: #002b2c;
+  --kind-objectstore-line: #008084;
+  --kind-objectstore-stroke: #00bdbf;
+  --kind-objectstore-ink: #90e2e2;
+  --kind-searchindex-fill: #082b1a;
+  --kind-searchindex-line: #00814b;
+  --kind-searchindex-stroke: #29c184;
+  --kind-searchindex-ink: #a2e2bf;
+  --kind-timeseriesdb-fill: #012c1f;
+  --kind-timeseriesdb-line: #008258;
+  --kind-timeseriesdb-stroke: #00c292;
+  --kind-timeseriesdb-ink: #9be3c7;
+  --kind-graphdb-fill: #002c27;
+  --kind-graphdb-line: #008273;
+  --kind-graphdb-stroke: #00bfae;
+  --kind-graphdb-ink: #92e3d6;
+  --kind-vectordb-fill: #0d2b17;
+  --kind-vectordb-line: #007f3b;
+  --kind-vectordb-stroke: #4abf74;
+  --kind-vectordb-ink: #aae1b7;
+  --kind-coldstorage-fill: #002a34;
+  --kind-coldstorage-line: #007b9b;
+  --kind-coldstorage-stroke: #00b9d7;
+  --kind-coldstorage-ink: #91dff2;
+  --kind-streambroker-fill: #331a2e;
+  --kind-streambroker-line: #98438b;
+  --kind-streambroker-stroke: #dd7dcc;
+  --kind-streambroker-ink: #f3bde7;
+  --kind-pubsub-fill: #351929;
+  --kind-pubsub-line: #a1407a;
+  --kind-pubsub-stroke: #e77ab9;
+  --kind-pubsub-ink: #f9bcdc;
+  --kind-websocket-fill: #371924;
+  --kind-websocket-line: #a73e68;
+  --kind-websocket-stroke: #ee78a5;
+  --kind-websocket-ink: #febbd2;
+  --kind-lambda-fill: #39191c;
+  --kind-lambda-line: #ab3d52;
+  --kind-lambda-stroke: #f4788b;
+  --kind-lambda-ink: #ffbbc3;
+  --kind-cron-fill: #2a2402;
+  --kind-cron-line: #7e6800;
+  --kind-cron-stroke: #bba500;
+  --kind-cron-ink: #ddd395;
+  --kind-ratelimiter-fill: #122a14;
+  --kind-ratelimiter-line: #217d2d;
+  --kind-ratelimiter-stroke: #60bd66;
+  --kind-ratelimiter-ink: #b0e0b0;
+  --kind-loadshedder-fill: #1b290d;
+  --kind-loadshedder-line: #477900;
+  --kind-loadshedder-stroke: #80b84b;
+  --kind-loadshedder-ink: #bedda6;
+  --kind-breaker-fill: #391917;
+  --kind-breaker-line: #ac3f3b;
+  --kind-breaker-stroke: #f67a72;
+  --kind-breaker-ink: #ffbdb7;
+  --kind-bulkhead-fill: #391a10;
+  --kind-bulkhead-line: #ab4320;
+  --kind-bulkhead-stroke: #f37f5a;
+  --kind-bulkhead-ink: #ffbfab;
+  --kind-autoscaler-fill: #232706;
+  --kind-autoscaler-line: #637200;
+  --kind-autoscaler-stroke: #9cb12b;
+  --kind-autoscaler-ink: #ccd99c;
+  --kind-region-fill: #34192c;
+  --kind-region-line: #9c4283;
+  --kind-region-stroke: #e27bc3;
+  --kind-region-ink: #f6bde2;
+  --kind-apigateway-fill: #08273b;
+  --kind-apigateway-line: #0070b2;
+  --kind-apigateway-stroke: #2caffa;
+  --kind-apigateway-ink: #a0d9ff;
+  --kind-sidecar-fill: #2e2201;
+  --kind-sidecar-line: #8b6100;
+  --kind-sidecar-stroke: #cc9d00;
+  --kind-sidecar-ink: #e7cf93;
+}
+
+/* The OS preference, honoured only when no explicit choice has been stored.
+   [data-theme='light'] is the opt-out, so someone on a dark OS who chose the
+   light theme keeps it. Duplicating the block rather than aliasing it is the
+   price of not requiring JavaScript for the first paint: the media query has
+   to stand on its own before any script runs. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --bg: #16151a;
+    --surface: #1d1c22;
+    --surface-2: #25242b;
+    --surface-3: #2f2e36;
+    --border: #302f38;
+    --border-strong: #6a6878;
+
+    --grid-line: #1e1d23;
+    --grid-major: #26252c;
+    --grid-dot: var(--grid-line);
+
+    --line: #4a4855;
+    --line-2: #615f6e;
+    --line-3: #807d8c;
+    --line-4: #a29fae;
+    --line-5: #c4c1cf;
+    --track: #2b2a32;
+
+    --text: #eceaf2;
+    --text-dim: #a8a5b4;
+    --text-faint: #9996a5;
+    --text-on-fill: #16151a;
+    --thumb-fill: #eceaf2;
+    --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239996a5' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+
+    --cat-violet: #b491dd;
+    --cat-blue: #78aee0;
+    --cat-rust: #fe987c;
+
+    --accent: #6f9bf0;
+    --accent-hover: #87acf5;
+    --accent-press: #5b86dc;
+    --accent-fg: #16151a;
+    --accent-soft: #1b2740;
+    --accent-ink: #a9c6ff;
+    --accent-ring: rgba(111, 155, 240, 0.38);
+    --accent-soft-hover: #223150; /* --accent-ink on it = 7.52:1 */
+
+    --ok: #4ac06e;
+    --warn: #d79a2b;
+    --danger: #f66a6f;
+
+    --ok-mark: #3fae61;
+    --warn-mark: #c98a1c;
+    --danger-mark: #e2565c;
+
+    --ok-soft: #16301f;
+    --warn-soft: #332616;
+    --danger-soft: #3a1d1f;
+    --danger-press: #e0585d; /* --text-on-fill on it = 4.94:1 */
+    --danger-ring: rgba(246, 106, 111, 0.38);
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.36), 0 4px 10px rgba(0, 0, 0, 0.44);
+    --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.36), 0 12px 28px rgba(0, 0, 0, 0.52);
+    --scrim: rgba(0, 0, 0, 0.56);
+    --sheen: rgba(255, 255, 255, 0.16);
+
+    --bevel: rgba(255, 255, 255, 0.07);
+    --bevel-on-accent: rgba(255, 255, 255, 0.14);
+    --bevel-under: transparent;
+
+    --kind-client-fill: #261e3a;
+    --kind-client-line: #7154b2;
+    --kind-client-stroke: #ac8ff9;
+    --kind-client-ink: #d4c7ff;
+    --kind-lb-fill: #0d263c;
+    --kind-lb-line: #056bb8;
+    --kind-lb-stroke: #50a9ff;
+    --kind-lb-ink: #a9d6ff;
+    --kind-cdn-fill: #002c29;
+    --kind-cdn-line: #00817b;
+    --kind-cdn-stroke: #00beb7;
+    --kind-cdn-ink: #90e3dc;
+    --kind-edgecompute-fill: #002c23;
+    --kind-edgecompute-line: #008265;
+    --kind-edgecompute-stroke: #00c19f;
+    --kind-edgecompute-ink: #97e3cd;
+    --kind-service-fill: #15243c;
+    --kind-service-line: #3865ba;
+    --kind-service-stroke: #6ea3ff;
+    --kind-service-ink: #b5d2ff;
+    --kind-worker-fill: #1c223c;
+    --kind-worker-line: #515ebb;
+    --kind-worker-stroke: #889bff;
+    --kind-worker-ink: #c0ceff;
+    --kind-queue-fill: #2b1d37;
+    --kind-queue-line: #824da6;
+    --kind-queue-stroke: #c287ec;
+    --kind-queue-ink: #e1c3fa;
+    --kind-retryqueue-fill: #2f1b33;
+    --kind-retryqueue-line: #8f4799;
+    --kind-retryqueue-stroke: #d182dc;
+    --kind-retryqueue-ink: #ebc0f1;
+    --kind-transcoder-fill: #22203c;
+    --kind-transcoder-line: #6558b7;
+    --kind-transcoder-stroke: #9e94ff;
+    --kind-transcoder-ink: #cbcaff;
+    --kind-db-fill: #022839;
+    --kind-db-line: #0075ab;
+    --kind-db-stroke: #00b4ee;
+    --kind-db-ink: #99dcfc;
+    --kind-cache-fill: #341f03;
+    --kind-cache-line: #9c5500;
+    --kind-cache-stroke: #e09112;
+    --kind-cache-ink: #f4c897;
+    --kind-writebehind-fill: #381b0c;
+    --kind-writebehind-line: #a74900;
+    --kind-writebehind-stroke: #ef8443;
+    --kind-writebehind-ink: #fdc2a1;
+    --kind-replica-fill: #002a35;
+    --kind-replica-line: #007aa0;
+    --kind-replica-stroke: #00b8dd;
+    --kind-replica-ink: #92def5;
+    --kind-shard-fill: #002b2f;
+    --kind-shard-line: #007e92;
+    --kind-shard-stroke: #00bbcd;
+    --kind-shard-ink: #8fe1eb;
+    --kind-objectstore-fill: #002b2c;
+    --kind-objectstore-line: #008084;
+    --kind-objectstore-stroke: #00bdbf;
+    --kind-objectstore-ink: #90e2e2;
+    --kind-searchindex-fill: #082b1a;
+    --kind-searchindex-line: #00814b;
+    --kind-searchindex-stroke: #29c184;
+    --kind-searchindex-ink: #a2e2bf;
+    --kind-timeseriesdb-fill: #012c1f;
+    --kind-timeseriesdb-line: #008258;
+    --kind-timeseriesdb-stroke: #00c292;
+    --kind-timeseriesdb-ink: #9be3c7;
+    --kind-graphdb-fill: #002c27;
+    --kind-graphdb-line: #008273;
+    --kind-graphdb-stroke: #00bfae;
+    --kind-graphdb-ink: #92e3d6;
+    --kind-vectordb-fill: #0d2b17;
+    --kind-vectordb-line: #007f3b;
+    --kind-vectordb-stroke: #4abf74;
+    --kind-vectordb-ink: #aae1b7;
+    --kind-coldstorage-fill: #002a34;
+    --kind-coldstorage-line: #007b9b;
+    --kind-coldstorage-stroke: #00b9d7;
+    --kind-coldstorage-ink: #91dff2;
+    --kind-streambroker-fill: #331a2e;
+    --kind-streambroker-line: #98438b;
+    --kind-streambroker-stroke: #dd7dcc;
+    --kind-streambroker-ink: #f3bde7;
+    --kind-pubsub-fill: #351929;
+    --kind-pubsub-line: #a1407a;
+    --kind-pubsub-stroke: #e77ab9;
+    --kind-pubsub-ink: #f9bcdc;
+    --kind-websocket-fill: #371924;
+    --kind-websocket-line: #a73e68;
+    --kind-websocket-stroke: #ee78a5;
+    --kind-websocket-ink: #febbd2;
+    --kind-lambda-fill: #39191c;
+    --kind-lambda-line: #ab3d52;
+    --kind-lambda-stroke: #f4788b;
+    --kind-lambda-ink: #ffbbc3;
+    --kind-cron-fill: #2a2402;
+    --kind-cron-line: #7e6800;
+    --kind-cron-stroke: #bba500;
+    --kind-cron-ink: #ddd395;
+    --kind-ratelimiter-fill: #122a14;
+    --kind-ratelimiter-line: #217d2d;
+    --kind-ratelimiter-stroke: #60bd66;
+    --kind-ratelimiter-ink: #b0e0b0;
+    --kind-loadshedder-fill: #1b290d;
+    --kind-loadshedder-line: #477900;
+    --kind-loadshedder-stroke: #80b84b;
+    --kind-loadshedder-ink: #bedda6;
+    --kind-breaker-fill: #391917;
+    --kind-breaker-line: #ac3f3b;
+    --kind-breaker-stroke: #f67a72;
+    --kind-breaker-ink: #ffbdb7;
+    --kind-bulkhead-fill: #391a10;
+    --kind-bulkhead-line: #ab4320;
+    --kind-bulkhead-stroke: #f37f5a;
+    --kind-bulkhead-ink: #ffbfab;
+    --kind-autoscaler-fill: #232706;
+    --kind-autoscaler-line: #637200;
+    --kind-autoscaler-stroke: #9cb12b;
+    --kind-autoscaler-ink: #ccd99c;
+    --kind-region-fill: #34192c;
+    --kind-region-line: #9c4283;
+    --kind-region-stroke: #e27bc3;
+    --kind-region-ink: #f6bde2;
+    --kind-apigateway-fill: #08273b;
+    --kind-apigateway-line: #0070b2;
+    --kind-apigateway-stroke: #2caffa;
+    --kind-apigateway-ink: #a0d9ff;
+    --kind-sidecar-fill: #2e2201;
+    --kind-sidecar-line: #8b6100;
+    --kind-sidecar-stroke: #cc9d00;
+    --kind-sidecar-ink: #e7cf93;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Reset
+   -------------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  /* Fixed-viewport app: the page never scrolls, panels scroll internally.
+     `clip`, not `hidden`: hidden still leaves the page a scroll container
+     that scrollIntoView (reachable via find-in-page) can scroll — measured,
+     a 36px programmatic scroll clipped the top bar with no way back. clip
+     removes the scroll box entirely. */
+  overflow: clip;
+}
+
+body {
+  font-family: var(--sans);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-body);
+  line-height: var(--lh-base);
+  letter-spacing: var(--tr-base);
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* Headings inherit the body step. Components pick a scale step explicitly;
+   nothing gets a size by virtue of its tag name. */
+h1,
+h2,
+h3,
+h4 {
+  font-size: inherit;
+  font-weight: var(--fw-num);
+  letter-spacing: var(--tr-num);
+}
+
+/* --------------------------------------------------------------------------
+   Focus — one ring, everywhere.
+
+   On a light background a bare 2px outline is easy to lose against pale
+   surfaces, so the ring is doubled: a solid accent outline plus a soft accent
+   halo carried on box-shadow. The halo is a FLAT 32%-alpha ring, not a blur
+   glow — it has a hard edge and does not bloom.
+   -------------------------------------------------------------------------- */
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* Opt-in halo for controls that sit on a tinted or busy surface. */
+.focus-halo:focus-visible {
+  box-shadow: 0 0 0 4px var(--accent-ring);
+}
+
+/* --------------------------------------------------------------------------
+   Primitives
+   -------------------------------------------------------------------------- */
+
+/* A panel is a single surface. It may contain rows. A row may not contain
+   another bordered box — one nesting level, maximum.
+
+   BOUNDARY RULE for the whole system:
+     - whitespace         is the default separator. Try it first.
+     - background shift   when two regions must be told apart while scrolling
+                          (surface vs surface-2).
+     - border             ONLY when two surfaces of the SAME colour meet, or
+                          when a control must advertise that it is editable.
+   A border that duplicates a background shift is noise and is deleted. */
+.panel {
+  background: var(--surface);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+  min-height: 0;
+  min-width: 0;
+}
+
+/* Panel that sits directly on the canvas and needs to detach from it. */
+.panel-raised {
+  background: var(--surface);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+  min-height: 0;
+  min-width: 0;
+}
+
+/* T1. The sole 11px definition in the codebase. Uppercase is mandatory: it is
+   what makes 11px read as a label rather than as failed body text.
+   Never a sentence, never a number, max ~18 characters. */
+.label {
+  font-size: var(--fs-label);
+  font-weight: var(--fw-med);
+  line-height: var(--lh-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tr-label);
+  color: var(--text-faint);
+}
+
+/* Explanatory prose. This app teaches, so help text is a first-class element
+   with a real measure limit and open leading — not a cramped afterthought. */
+.prose {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-body);
+  line-height: var(--lh-prose);
+  color: var(--text-dim);
+  max-width: 58ch;
+  text-wrap: pretty;
+}
+
+/* Every number in the application carries this class. Tabular figures are
+   what stop a live readout from jittering as its digits change. */
+.num,
+.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  letter-spacing: var(--tr-num);
+}
+
+/* Numeric scale steps. Each pairs its size with the tracking and line-height
+   that step requires, so a call site sets one class rather than four rules. */
+.num-sm {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+}
+
+.num-md {
+  font-size: var(--fs-num);
+  font-weight: var(--fw-num);
+  line-height: var(--lh-num);
+}
+
+.num-lg {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-num);
+  line-height: var(--lh-num);
+  letter-spacing: var(--tr-lg);
+}
+
+/* The single largest element on screen: the system-p99 readout, and only
+   it. The hero size IS the instruction "watch this number"; a second hero
+   would repeal it. */
+.num-hero {
+  font-size: var(--fs-hero);
+  font-weight: var(--fw-num);
+  line-height: var(--lh-hero);
+  letter-spacing: var(--tr-hero);
+}
+
+/* A unit suffix rides at the dim step beside its value, never at the value's
+   size — that is what keeps "1.2 k/s" from reading as two competing numbers. */
+.unit {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-body);
+  letter-spacing: 0;
+  color: var(--text-faint);
+}
+
+/* ==========================================================================
+   Kind identity mapping — the SOLE owner of kind -> colour.
+
+   Any element carrying [data-kind] resolves that kind's four role tokens
+   into four locals. Everything downstream — the canvas node and all its
+   states, the palette chip, the inspector header — is then written against
+   --k-fill / --k-line / --k-stroke / --k-ink and is completely kind-
+   agnostic.
+
+   That is the whole point of doing it here rather than per component.
+   There are 33 kinds and roughly a dozen states; enumerating the cross-
+   product in each file would be hundreds of rules that drift apart the
+   first time anyone edits one. This is 33 + 12, written once.
+
+   Consumers must always supply a neutral fallback -- var(--k-fill,
+   var(--surface-2)) -- so an element with no [data-kind] ancestor renders
+   as a plain grey object rather than as a transparent hole.
+   ========================================================================== */
+
+/* traffic */
+[data-kind='client'] {
+  --k-fill: var(--kind-client-fill);
+  --k-line: var(--kind-client-line);
+  --k-stroke: var(--kind-client-stroke);
+  --k-ink: var(--kind-client-ink);
+}
+
+[data-kind='lb'] {
+  --k-fill: var(--kind-lb-fill);
+  --k-line: var(--kind-lb-line);
+  --k-stroke: var(--kind-lb-stroke);
+  --k-ink: var(--kind-lb-ink);
+}
+
+[data-kind='cdn'] {
+  --k-fill: var(--kind-cdn-fill);
+  --k-line: var(--kind-cdn-line);
+  --k-stroke: var(--kind-cdn-stroke);
+  --k-ink: var(--kind-cdn-ink);
+}
+
+[data-kind='edgecompute'] {
+  --k-fill: var(--kind-edgecompute-fill);
+  --k-line: var(--kind-edgecompute-line);
+  --k-stroke: var(--kind-edgecompute-stroke);
+  --k-ink: var(--kind-edgecompute-ink);
+}
+
+/* compute */
+[data-kind='service'] {
+  --k-fill: var(--kind-service-fill);
+  --k-line: var(--kind-service-line);
+  --k-stroke: var(--kind-service-stroke);
+  --k-ink: var(--kind-service-ink);
+}
+
+[data-kind='worker'] {
+  --k-fill: var(--kind-worker-fill);
+  --k-line: var(--kind-worker-line);
+  --k-stroke: var(--kind-worker-stroke);
+  --k-ink: var(--kind-worker-ink);
+}
+
+[data-kind='transcoder'] {
+  --k-fill: var(--kind-transcoder-fill);
+  --k-line: var(--kind-transcoder-line);
+  --k-stroke: var(--kind-transcoder-stroke);
+  --k-ink: var(--kind-transcoder-ink);
+}
+
+[data-kind='queue'] {
+  --k-fill: var(--kind-queue-fill);
+  --k-line: var(--kind-queue-line);
+  --k-stroke: var(--kind-queue-stroke);
+  --k-ink: var(--kind-queue-ink);
+}
+
+[data-kind='retryqueue'] {
+  --k-fill: var(--kind-retryqueue-fill);
+  --k-line: var(--kind-retryqueue-line);
+  --k-stroke: var(--kind-retryqueue-stroke);
+  --k-ink: var(--kind-retryqueue-ink);
+}
+
+/* data */
+[data-kind='db'] {
+  --k-fill: var(--kind-db-fill);
+  --k-line: var(--kind-db-line);
+  --k-stroke: var(--kind-db-stroke);
+  --k-ink: var(--kind-db-ink);
+}
+
+[data-kind='replica'] {
+  --k-fill: var(--kind-replica-fill);
+  --k-line: var(--kind-replica-line);
+  --k-stroke: var(--kind-replica-stroke);
+  --k-ink: var(--kind-replica-ink);
+}
+
+[data-kind='shard'] {
+  --k-fill: var(--kind-shard-fill);
+  --k-line: var(--kind-shard-line);
+  --k-stroke: var(--kind-shard-stroke);
+  --k-ink: var(--kind-shard-ink);
+}
+
+[data-kind='cache'] {
+  --k-fill: var(--kind-cache-fill);
+  --k-line: var(--kind-cache-line);
+  --k-stroke: var(--kind-cache-stroke);
+  --k-ink: var(--kind-cache-ink);
+}
+
+[data-kind='writebehind'] {
+  --k-fill: var(--kind-writebehind-fill);
+  --k-line: var(--kind-writebehind-line);
+  --k-stroke: var(--kind-writebehind-stroke);
+  --k-ink: var(--kind-writebehind-ink);
+}
+
+/* specialised stores */
+[data-kind='vectordb'] {
+  --k-fill: var(--kind-vectordb-fill);
+  --k-line: var(--kind-vectordb-line);
+  --k-stroke: var(--kind-vectordb-stroke);
+  --k-ink: var(--kind-vectordb-ink);
+}
+
+[data-kind='searchindex'] {
+  --k-fill: var(--kind-searchindex-fill);
+  --k-line: var(--kind-searchindex-line);
+  --k-stroke: var(--kind-searchindex-stroke);
+  --k-ink: var(--kind-searchindex-ink);
+}
+
+[data-kind='timeseriesdb'] {
+  --k-fill: var(--kind-timeseriesdb-fill);
+  --k-line: var(--kind-timeseriesdb-line);
+  --k-stroke: var(--kind-timeseriesdb-stroke);
+  --k-ink: var(--kind-timeseriesdb-ink);
+}
+
+[data-kind='graphdb'] {
+  --k-fill: var(--kind-graphdb-fill);
+  --k-line: var(--kind-graphdb-line);
+  --k-stroke: var(--kind-graphdb-stroke);
+  --k-ink: var(--kind-graphdb-ink);
+}
+
+[data-kind='objectstore'] {
+  --k-fill: var(--kind-objectstore-fill);
+  --k-line: var(--kind-objectstore-line);
+  --k-stroke: var(--kind-objectstore-stroke);
+  --k-ink: var(--kind-objectstore-ink);
+}
+
+[data-kind='coldstorage'] {
+  --k-fill: var(--kind-coldstorage-fill);
+  --k-line: var(--kind-coldstorage-line);
+  --k-stroke: var(--kind-coldstorage-stroke);
+  --k-ink: var(--kind-coldstorage-ink);
+}
+
+/* messaging */
+[data-kind='streambroker'] {
+  --k-fill: var(--kind-streambroker-fill);
+  --k-line: var(--kind-streambroker-line);
+  --k-stroke: var(--kind-streambroker-stroke);
+  --k-ink: var(--kind-streambroker-ink);
+}
+
+[data-kind='pubsub'] {
+  --k-fill: var(--kind-pubsub-fill);
+  --k-line: var(--kind-pubsub-line);
+  --k-stroke: var(--kind-pubsub-stroke);
+  --k-ink: var(--kind-pubsub-ink);
+}
+
+[data-kind='websocket'] {
+  --k-fill: var(--kind-websocket-fill);
+  --k-line: var(--kind-websocket-line);
+  --k-stroke: var(--kind-websocket-stroke);
+  --k-ink: var(--kind-websocket-ink);
+}
+
+[data-kind='lambda'] {
+  --k-fill: var(--kind-lambda-fill);
+  --k-line: var(--kind-lambda-line);
+  --k-stroke: var(--kind-lambda-stroke);
+  --k-ink: var(--kind-lambda-ink);
+}
+
+[data-kind='cron'] {
+  --k-fill: var(--kind-cron-fill);
+  --k-line: var(--kind-cron-line);
+  --k-stroke: var(--kind-cron-stroke);
+  --k-ink: var(--kind-cron-ink);
+}
+
+/* control */
+[data-kind='autoscaler'] {
+  --k-fill: var(--kind-autoscaler-fill);
+  --k-line: var(--kind-autoscaler-line);
+  --k-stroke: var(--kind-autoscaler-stroke);
+  --k-ink: var(--kind-autoscaler-ink);
+}
+
+[data-kind='loadshedder'] {
+  --k-fill: var(--kind-loadshedder-fill);
+  --k-line: var(--kind-loadshedder-line);
+  --k-stroke: var(--kind-loadshedder-stroke);
+  --k-ink: var(--kind-loadshedder-ink);
+}
+
+[data-kind='ratelimiter'] {
+  --k-fill: var(--kind-ratelimiter-fill);
+  --k-line: var(--kind-ratelimiter-line);
+  --k-stroke: var(--kind-ratelimiter-stroke);
+  --k-ink: var(--kind-ratelimiter-ink);
+}
+
+[data-kind='breaker'] {
+  --k-fill: var(--kind-breaker-fill);
+  --k-line: var(--kind-breaker-line);
+  --k-stroke: var(--kind-breaker-stroke);
+  --k-ink: var(--kind-breaker-ink);
+}
+
+[data-kind='bulkhead'] {
+  --k-fill: var(--kind-bulkhead-fill);
+  --k-line: var(--kind-bulkhead-line);
+  --k-stroke: var(--kind-bulkhead-stroke);
+  --k-ink: var(--kind-bulkhead-ink);
+}
+
+[data-kind='region'] {
+  --k-fill: var(--kind-region-fill);
+  --k-line: var(--kind-region-line);
+  --k-stroke: var(--kind-region-stroke);
+  --k-ink: var(--kind-region-ink);
+}
+
+[data-kind='apigateway'] {
+  --k-fill: var(--kind-apigateway-fill);
+  --k-line: var(--kind-apigateway-line);
+  --k-stroke: var(--kind-apigateway-stroke);
+  --k-ink: var(--kind-apigateway-ink);
+}
+
+[data-kind='sidecar'] {
+  --k-fill: var(--kind-sidecar-fill);
+  --k-line: var(--kind-sidecar-line);
+  --k-stroke: var(--kind-sidecar-stroke);
+  --k-ink: var(--kind-sidecar-ink);
+}
+
+/* Status modifiers. Applied to the number itself, never to its container.
+   At 'ok' nothing is coloured — a healthy screen is entirely neutral, which
+   is what gives --warn and --danger their meaning when they do appear.
+
+   These set a CUSTOM PROPERTY as well as `color`, and every typographic
+   primitive that wants a status tint resolves `color: var(--status-ink,
+   <its default>)`. That indirection is the whole point: a status class and
+   a primitive like .row-v are both single class selectors, so whichever is
+   written later in the file wins the cascade. Setting `color` alone meant
+   `.row-v.is-danger` silently rendered in plain --text — the one moment the
+   UI must shout, it whispered. A custom property is not subject to that
+   race: it flows to the descendant regardless of rule order, so the fix
+   cannot rot the next time a primitive is added below this block. */
+.is-ok {
+  --status-ink: var(--ok);
+  color: var(--status-ink);
+}
+
+.is-warn {
+  --status-ink: var(--warn);
+  color: var(--status-ink);
+}
+
+.is-danger {
+  --status-ink: var(--danger);
+  color: var(--status-ink);
+}
+
+/* A readout crossing a threshold eases into its new colour instead of
+   snapping. The 10Hz refresh only changes the digits; `color` moves at the
+   moment a state class flips, which is exactly the change worth a beat of
+   motion, and the ease also absorbs the flicker of a value hovering on a
+   boundary. Colour only: a status background (the pills) still switches
+   with its class. */
+.is-ok,
+.is-warn,
+.is-danger {
+  transition: color var(--dur-slow) var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-ok,
+  .is-warn,
+  .is-danger {
+    transition: none;
+  }
+}
+
+/* Status pill. Text sits on a soft tint at the AA-verified text colour. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  height: 22px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-med);
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pill.is-ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.pill.is-warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.pill.is-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* --------------------------------------------------------------------------
+   Buttons — sole definition. Do not re-declare .btn in a component file.
+
+   SIZING. Default height 36px, comfortably above the 32px floor. Primary
+   actions use .btn-lg at 44px. Icon-only buttons are square at 36px so the
+   glyph is centred by box AND by eye.
+
+   TACTILITY. A button is legible as clickable from three cues at once: a
+   real surface, a 1px outline slightly darker than any divider, and a 1px
+   inset highlight along the top edge that reads as a subtle bevel. On press
+   the surface darkens and the bevel is removed, so the control visibly
+   depresses rather than merely changing colour.
+   -------------------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  height: 36px;
+  padding: 0 var(--sp-3);
+  border: var(--bw) solid var(--border-strong);
+  border-radius: var(--r-btn);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-med);
+  line-height: 1;
+  letter-spacing: var(--tr-base);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 1px 0 var(--bevel),
+    inset 0 -1px 0 var(--bevel-under);
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--line-2);
+}
+
+.btn:active:not(:disabled) {
+  background: var(--surface-3);
+  border-color: var(--line-2);
+  box-shadow: none;
+  transform: translateY(1px);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--accent-ring);
+}
+
+/* Primary. At most one is visible at a time. 44px tall — this is the action
+   the student is meant to take. */
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+  font-weight: var(--fw-num);
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 1px 0 var(--bevel-on-accent);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.btn-primary:active:not(:disabled) {
+  background: var(--accent-press);
+  border-color: var(--accent-press);
+  box-shadow: none;
+  transform: translateY(1px);
+}
+
+/* Secondary is the .btn default above; this alias exists so a call site can
+   state its intent rather than relying on the bare class. */
+.btn-secondary {
+  background: var(--surface);
+}
+
+/* Ghost. No surface and no outline until hovered — for dense toolbars where
+   a row of outlined buttons would read as a fence. */
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+  box-shadow: none;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: transparent;
+  color: var(--text);
+  box-shadow: none;
+}
+
+.btn-ghost:active:not(:disabled) {
+  background: var(--surface-3);
+  box-shadow: none;
+  transform: translateY(1px);
+}
+
+/* Destructive. Outlined at rest so a delete never looks like the happy path;
+   fills only on hover, once the intent is deliberate. */
+.btn-danger {
+  background: var(--surface);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--text-on-fill);
+}
+
+.btn-danger:active:not(:disabled) {
+  background: var(--danger-press);
+  border-color: var(--danger-press);
+  color: var(--text-on-fill);
+  box-shadow: none;
+  transform: translateY(1px);
+}
+
+.btn-danger:focus-visible {
+  outline-color: var(--danger);
+  box-shadow: 0 0 0 4px var(--danger-ring);
+}
+
+/* Size variants. */
+.btn-lg {
+  height: 44px;
+  padding: 0 var(--sp-5);
+  font-size: var(--fs-base);
+}
+
+.btn-sm {
+  height: 32px;
+  padding: 0 var(--sp-2);
+  font-size: var(--fs-sm);
+}
+
+.btn-icon {
+  width: 36px;
+  padding: 0;
+}
+
+.btn-icon.btn-sm {
+  width: 32px;
+}
+
+/* Touch-first devices: every button meets the 44px touch floor, whatever
+   size variant it declares. min-height/min-width beat the fixed height and
+   width above by CSS sizing rules (not by specificity), so this one rule
+   covers .btn, .btn-sm and .btn-icon alike without re-declaring any of
+   them. Wall displays are used at arm's length, where 44px is the floor
+   rather than the target; padding and typography are untouched, so the
+   buttons grow, they do not rescale. */
+@media (pointer: coarse) {
+  .btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* Disabled. Opacity alone would drag the label under 4.5:1, so the disabled
+   state is expressed with real tokens and keeps its contrast. */
+.btn:disabled {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text-faint);
+  box-shadow: none;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-ghost:disabled {
+  background: transparent;
+  border-color: transparent;
+}
+
+/* Pressed / selected state for toggles and segmented controls. */
+.btn[aria-pressed='true'],
+.btn[data-active='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: none;
+}
+
+.btn[aria-pressed='true']:hover:not(:disabled),
+.btn[data-active='true']:hover:not(:disabled) {
+  background: var(--accent-soft-hover);
+}
+
+/* --------------------------------------------------------------------------
+   Slider — the app's primary control, and the only thing on screen the
+   student directly manipulates continuously. It must feel precise and
+   pleasant to drag.
+
+   Geometry, identical across engines:
+     hit area  32px tall (pointer target, well above the 24px minimum)
+     track      6px, pill radius, --track trough
+     fill       accent, shown on BOTH engines
+     thumb     18px circle, white with a 2px accent ring and a real shadow,
+               so it reads as a physical knob resting on the track
+
+   WebKit exposes no ::-moz-range-progress equivalent, so the filled portion
+   is painted with a hard-stop background-image on the input itself, driven by
+   a --fill-pct custom property the component sets from the value. Firefox
+   uses its native progress pseudo-element. Both are specified; the selectors
+   are deliberately NOT merged, because one unrecognised pseudo-element
+   invalidates an entire selector group.
+   -------------------------------------------------------------------------- */
+
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+  /* The component sets --fill-pct (0-100). Defaults to 0 so an unset slider
+     renders an empty track rather than a broken gradient. */
+  --fill-pct: 0%;
+}
+
+/* The hit band grows under a finger: the 32px band that suits a mouse is a
+   miss-prone strip under a thumb. Track and thumb keep their size; only the
+   input's touchable height changes. Declared AFTER the rule above: in the
+   shared coarse block it lost to that rule's 32px by source order and never
+   applied. */
+@media (pointer: coarse) {
+  .slider {
+    height: 44px;
+  }
+}
+
+.slider:active {
+  cursor: grabbing;
+}
+
+/* --- Track: WebKit ---
+   The fill is a two-stop hard-edged background. It is a solid-colour fill
+   expressed through gradient syntax, not a gradient: both stops meet at the
+   same position, so no blend is ever rendered. */
+.slider::-webkit-slider-runnable-track {
+  height: var(--track-h);
+  border-radius: var(--r-pill);
+  background-color: var(--track);
+  background-image: linear-gradient(
+    to right,
+    var(--accent) 0 var(--fill-pct),
+    transparent var(--fill-pct) 100%
+  );
+  border: none;
+}
+
+/* --- Thumb: WebKit ---
+   margin-top centres the thumb on the track: (track - thumb) / 2. */
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: var(--thumb);
+  height: var(--thumb);
+  margin-top: calc((var(--track-h) - var(--thumb)) / 2);
+  border-radius: 50%;
+  background: var(--thumb-fill);
+  border: 2px solid var(--accent);
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+
+.slider:hover::-webkit-slider-thumb {
+  border-color: var(--accent-hover);
+  transform: scale(1.08);
+}
+
+.slider:active::-webkit-slider-thumb {
+  border-color: var(--accent-press);
+  transform: scale(1.12);
+}
+
+/* The thumb cannot take an outline, so focus is drawn as a flat halo ring on
+   the thumb itself — a hard-edged 4px ring, not a blur. */
+.slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px var(--accent-ring);
+}
+
+/* --- Track: Firefox --- */
+.slider::-moz-range-track {
+  height: var(--track-h);
+  border-radius: var(--r-pill);
+  background: var(--track);
+  border: none;
+}
+
+.slider::-moz-range-progress {
+  height: var(--track-h);
+  border-radius: var(--r-pill);
+  background: var(--accent);
+}
+
+.slider::-moz-range-thumb {
+  width: var(--thumb);
+  height: var(--thumb);
+  border-radius: 50%;
+  background: var(--thumb-fill);
+  border: 2px solid var(--accent);
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+
+.slider:hover::-moz-range-thumb {
+  border-color: var(--accent-hover);
+  transform: scale(1.08);
+}
+
+.slider:active::-moz-range-thumb {
+  border-color: var(--accent-press);
+  transform: scale(1.12);
+}
+
+.slider:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 4px var(--accent-ring);
+}
+
+/* Firefox draws a dotted inner focus ring on the input itself; suppress it in
+   favour of the thumb ring above. */
+.slider::-moz-focus-outer {
+  border: 0;
+}
+
+.slider:focus-visible {
+  outline: none;
+}
+
+.slider:disabled {
+  cursor: not-allowed;
+  --fill-pct: 0%;
+}
+
+.slider:disabled::-webkit-slider-thumb {
+  border-color: var(--line-2);
+  transform: none;
+}
+
+.slider:disabled::-moz-range-thumb {
+  border-color: var(--line-2);
+  transform: none;
+}
+
+/* --------------------------------------------------------------------------
+   Inputs
+
+   The canvas note editor (.cv-note-editor, see textWysiwyg.ts) is a textarea
+   that must look like nothing at all, so it is excluded here the way
+   Excalidraw excludes its own `.excalidraw-wysiwyg` from its form styling.
+   -------------------------------------------------------------------------- */
+
+input[type='text'],
+input[type='number'],
+select,
+textarea:not(.cv-note-editor) {
+  height: 36px;
+  padding: 0 var(--sp-3);
+  border: var(--bw) solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-body);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
+}
+
+textarea:not(.cv-note-editor) {
+  height: auto;
+  min-height: 72px;
+  padding: var(--sp-2) var(--sp-3);
+  line-height: var(--lh-base);
+  resize: vertical;
+}
+
+/* Numeric inputs are numbers: mono, tabular, right-aligned so the digits of
+   successive rows line up on a shared axis. */
+input[type='number'] {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  letter-spacing: var(--tr-num);
+  text-align: right;
+}
+
+select {
+  padding-right: var(--sp-7);
+  cursor: pointer;
+  /* Neutral chevron, inlined so no network request is needed. */
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right var(--sp-3) center;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+select option {
+  background: var(--surface);
+  color: var(--text);
+}
+
+input[type='text']:hover:not(:disabled),
+input[type='number']:hover:not(:disabled),
+select:hover:not(:disabled),
+textarea:not(.cv-note-editor):hover:not(:disabled) {
+  border-color: var(--line-2);
+}
+
+input[type='text']:focus,
+input[type='number']:focus,
+select:focus,
+textarea:not(.cv-note-editor):focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+input[type='text']:focus-visible,
+input[type='number']:focus-visible,
+select:focus-visible,
+textarea:not(.cv-note-editor):focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-faint);
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+/* Hide number spinners — values are typed or dragged, not stepped. */
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Checkbox / radio, sized to sit on the same optical line as 14px body text. */
+input[type='checkbox'],
+input[type='radio'] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* Label + control on one row. */
+.field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-height: 36px;
+}
+
+.field > .label {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.field > input,
+.field > select {
+  flex: 0 0 96px;
+  width: 96px;
+}
+
+/* Full-width control below its label. */
+.field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.field-stack > input,
+.field-stack > select,
+.field-stack > textarea {
+  width: 100%;
+}
+
+/* Key / value row: dim label left, mono value right-aligned so every value in
+   a panel shares one vertical axis. */
+.row-k {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-body);
+  line-height: var(--lh-base);
+  color: var(--text-dim);
+}
+
+.row-v {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  font-size: var(--fs-num);
+  font-weight: var(--fw-num);
+  line-height: var(--lh-num);
+  letter-spacing: var(--tr-num);
+  color: var(--status-ink, var(--text));
+  text-align: right;
+  /* Guards the edge case the brief calls out: a 4-digit value where two were
+     expected must not wrap and shove the label into the panel wall. */
+  white-space: nowrap;
+}
+
+/* A long node label must truncate, never overflow its panel. */
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* Empty state. Centred, calm, and written as a sentence — this is where a
+   student lands before they have done anything, so it must not read as an
+   error. */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: var(--sp-7) var(--sp-5);
+  text-align: center;
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-prose);
+}
+
+/* Hairline divider. Used only where two same-coloured surfaces meet. */
+.rule {
+  height: 1px;
+  background: var(--border);
+  border: none;
+}
+
+/* --------------------------------------------------------------------------
+   Scrollbars — subtle, for internally scrolling panels.
+   -------------------------------------------------------------------------- */
+
+.scroll {
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+  /* Scrolling stops here rather than chaining to an ancestor. Two things
+     depend on it: a wheel gesture that reaches the end of this panel must not
+     start moving whatever is behind it, and full-page capture extensions walk
+     every scroll container they find, so an unbounded one makes them scroll
+     the app instead of photographing it. */
+  overscroll-behavior: contain;
+}
+
+.scroll::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border: 4px solid transparent;
+  background-clip: content-box;
+  border-radius: var(--r-pill);
+}
+
+.scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--line-2);
+  background-clip: content-box;
+}
+
+.scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* --------------------------------------------------------------------------
+   Utilities
+   -------------------------------------------------------------------------- */
+
+/* Visible to screen readers, absent from the visual layout. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Reduced motion
+   The app has exactly two animations: interactive transitions (120-200ms) and
+   the edge-flow dash offset, which encodes a live measurement. Both are
+   neutralised here; no content animation exists to suppress.
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+
+  .btn:active:not(:disabled),
+  .btn-primary:active:not(:disabled),
+  .btn-ghost:active:not(:disabled),
+  .btn-danger:active:not(:disabled) {
+    transform: none;
+  }
+
+  .slider:hover::-webkit-slider-thumb,
+  .slider:active::-webkit-slider-thumb {
+    transform: none;
+  }
+
+  .slider:hover::-moz-range-thumb,
+  .slider:active::-moz-range-thumb {
+    transform: none;
+  }
+}

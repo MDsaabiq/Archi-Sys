@@ -1,0 +1,369 @@
+/* ==========================================================================
+   Settings dialog.
+
+   Owns .st-* only, and reuses .btn and the tokens from index.css. Structure
+   and motion deliberately mirror the shortcuts card (.sc-*): the two are the
+   same kind of object, and a student who has opened one should find the other
+   already familiar. Motion sits at the interactive durations; the global
+   prefers-reduced-motion rule in index.css shortens both while animationend,
+   which drives unmount, still fires.
+   ========================================================================== */
+
+.st-root {
+  position: fixed;
+  inset: 0;
+  /* Same layer as the shortcuts dialog and the glossary. */
+  z-index: 500;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-5);
+}
+
+.st-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+  cursor: default;
+  animation: st-scrim-in var(--dur-slow) var(--ease-out);
+}
+
+.st-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(460px, 100%);
+  max-height: min(640px, 100%);
+  min-height: 0;
+  background: var(--surface);
+  border: var(--bw) solid var(--border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  outline: none;
+  animation: st-card-in var(--dur-slow) var(--ease-out);
+}
+
+.st-root.is-closing .st-card {
+  animation: st-card-out var(--dur-base) var(--ease) forwards;
+}
+
+.st-root.is-closing .st-scrim {
+  animation: st-scrim-out var(--dur-base) var(--ease) forwards;
+}
+
+/* On a phone the card becomes a bottom sheet, rising from the same edge
+   with the same motion as the panels the tab bar opens. app-sheet-in /
+   app-sheet-out are declared in App.css. */
+@media (max-width: 720px) {
+  .st-root {
+    place-items: end stretch;
+    padding: 0;
+  }
+
+  .st-card {
+    width: 100%;
+    /* .st-body is the part that scrolls, as it is on a wider screen. */
+    max-height: calc(100dvh - var(--sp-7));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    border-bottom: 0;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    animation: app-sheet-in var(--dur-base) var(--ease-out);
+  }
+
+  .st-root.is-closing .st-card {
+    animation: app-sheet-out var(--dur-base) var(--ease) forwards;
+  }
+}
+
+@keyframes st-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes st-card-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes st-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes st-scrim-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.st-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5) var(--sp-3);
+  border-bottom: var(--bw) solid var(--border);
+}
+
+.st-title {
+  margin: 0;
+  font-size: var(--fs-base);
+  font-weight: var(--fw-med);
+  letter-spacing: var(--tr-base);
+  color: var(--text);
+}
+
+.st-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.st-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.st-group-title {
+  margin: 0;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-med);
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.st-row-label {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-body);
+  color: var(--text);
+}
+
+.st-hint {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-dim);
+}
+
+/* ---- theme: a three-way segmented control ---- */
+
+.st-choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.st-segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* Four choices rather than three. A modifier instead of a second component,
+   because the only difference is the column count. */
+.st-segmented-4 {
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
+  padding: 2px;
+  background: var(--surface-2);
+  border: var(--bw) solid var(--border-strong);
+  border-radius: var(--r-btn);
+}
+
+.st-seg {
+  height: 30px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-med);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+
+.st-seg:hover:not(.is-active) {
+  color: var(--text);
+}
+
+.st-seg.is-active {
+  background: var(--surface);
+  color: var(--text);
+  border: var(--bw) solid var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.st-seg.is-active-4 {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.st-seg:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* ---- toggles ---- */
+
+.st-row {
+  display: flex;
+}
+
+/* The whole row is the control, so the label and its explanation are both
+   part of the hit target rather than decoration beside a small switch. */
+.st-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-2);
+  margin: calc(var(--sp-2) * -1);
+  border: none;
+  border-radius: var(--r-btn);
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.st-switch:hover {
+  background: var(--surface-2);
+}
+
+.st-switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.st-switch-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.st-switch-track {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  margin-top: 1px;
+  background: var(--track);
+  border: var(--bw) solid var(--border-strong);
+  border-radius: var(--r-pill);
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
+}
+
+.st-switch[aria-checked='true'] .st-switch-track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.st-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: var(--surface);
+  border-radius: 50%;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+.st-switch[aria-checked='true'] .st-switch-thumb {
+  transform: translateX(14px);
+}
+
+/* Save and share. Full-width rows rather than a row of small buttons: each
+   one is an icon, a name and a line saying what it does, which is the same
+   shape as the toggles above and means the panel reads as one list instead
+   of a list and then a button bar.
+
+   Buttons, not switches, because these are actions: they happen once when
+   pressed rather than holding a state. */
+.st-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.st-action {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-2);
+  margin: calc(var(--sp-2) * -1);
+  margin-bottom: 0;
+  border: none;
+  border-radius: var(--r-btn);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease);
+}
+
+.st-action:hover {
+  background: var(--surface-2);
+}
+
+.st-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Aligned to the label's cap height rather than centred on the whole row,
+   so the icon sits with the name and not between the two lines. */
+.st-action-icon {
+  flex: none;
+  margin-top: 3px;
+  color: var(--text-dim);
+}
+
+.st-action:hover .st-action-icon {
+  color: var(--accent);
+}
+
+.st-action-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* The 44px touch floor the shared .btn takes in index.css. */
+@media (pointer: coarse) {
+  .st-seg {
+    height: 44px;
+  }
+}

@@ -1,0 +1,673 @@
+/* ==========================================================================
+   Palette — the left rail.
+
+   This rail is where a student learns the colour language the canvas
+   speaks. Every component row carries a chip painted in that kind's own
+   tokens, so the amber thing in the rail and the amber thing on the canvas
+   are recognisably the same object. That is the whole reason the chips are
+   here; they are a legend, not decoration.
+
+   WHY A CHIP AND NOT A COLOURED DOT.
+   Measured against the panel surface, --kind-*-line lands between 1.87:1
+   and 2.39:1 — well under the 3:1 a graphical mark needs. A bare dot in
+   that colour would be invisible to a good number of students. The chip
+   instead pairs the pale --kind-*-fill body with the --kind-*-stroke
+   outline, which measures 3.15 - 4.17:1 on every surface this rail uses
+   (surface, surface-2 on hover, surface-3 on press). The glyph inside is
+   --kind-*-ink at 6.89 - 7.48:1 on its own fill. The identity is carried
+   by a shape that is genuinely visible rather than by a tint that is not.
+
+   The chip takes its colour from index.css, which resolves [data-kind] on
+   the row into the --k-* locals this file consumes. All 33 kinds are
+   mapped there; none falls back to grey.
+
+   BOUNDARIES. Rows are separated by whitespace and a hover tint. There is
+   no border on a row, no box around a group, and no card inside a card.
+   The only rules in the file are the ones between disclosure sections,
+   where two same-coloured surfaces genuinely meet.
+   ========================================================================== */
+
+.pal {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pal-scroll {
+  flex: 1 1 auto;
+  padding: var(--sp-3) 0 var(--sp-5);
+  overflow-x: hidden;
+}
+
+/* --------------------------------------------------------------------------
+   Disclosure section
+   -------------------------------------------------------------------------- */
+
+/* A hairline between sections — two identical surfaces meeting is the one
+   case the boundary rule allows a border for. */
+.pal-section + .pal-section {
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: var(--bw) solid var(--border);
+}
+
+.pal-h {
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+}
+
+/* The header is the disclosure control. Full-bleed so the hit target is the
+   whole width of the rail rather than the width of the word. */
+.pal-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--sp-4);
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+
+.pal-toggle:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* Pressed. A disclosure that opens a section is one of the most-clicked
+   controls in the rail; without this it was the only one that did not
+   acknowledge the press. */
+.pal-toggle:active {
+  background: var(--surface-3);
+}
+
+.pal-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  /* Inset rather than offset: a full-bleed row has no margin to ring into,
+     and an outward ring would be clipped by the rail's overflow. */
+  outline-offset: -2px;
+  border-radius: 0;
+}
+
+/* The chevron inherits the header's colour, so it brightens with the label
+   on hover instead of staying behind at a dimmer step. */
+.pal-chev {
+  flex: none;
+  color: var(--text-faint);
+  transition:
+    transform var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+
+.pal-toggle:hover .pal-chev {
+  color: var(--text-dim);
+}
+
+.pal-toggle[aria-expanded='true'] .pal-chev {
+  transform: rotate(90deg);
+}
+
+/* Inherits .label. The colour is overridden so the title tracks the header's
+   hover state as one unit. */
+.pal-toggle-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: inherit;
+}
+
+/* The count is a fact about a collapsed section, so it must stay legible
+   without pulling the eye. Tabular figures keep 3 and 14 the same width. */
+.pal-count {
+  flex: none;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-body);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.pal-body {
+  padding-top: var(--sp-1);
+}
+
+/* --------------------------------------------------------------------------
+   Group caption inside the Components section
+   -------------------------------------------------------------------------- */
+
+.pal-group + .pal-group {
+  margin-top: var(--sp-3);
+}
+
+/* Indented to the same left axis as the row NAMES, not the row chips, so the
+   caption reads as a heading for the words beneath it. Written as the sum it
+   actually is — row padding + chip + gap — so it cannot drift out of
+   alignment if any of the three changes. */
+/* The rail's one section header.
+   Sits on the same left axis as a row's icon, not the deeper axis the group
+   captions use, so the hierarchy reads top down: header, then caption, then
+   row. The count is pushed to the far edge rather than trailing the word,
+   which keeps it in a column of its own and stops the header looking like a
+   sentence that ran out. */
+.pal-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4) var(--sp-2);
+  margin: 0;
+  color: var(--text-dim);
+}
+
+.pal-heading-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+/* --------------------------------------------------------------------------
+   Search.
+
+   Sits under the heading rather than above it, so the rail still opens with
+   its own name. The field is the full width of the rail minus its padding;
+   at 224px there is no room for anything beside it.
+   -------------------------------------------------------------------------- */
+
+.pal-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 0 var(--sp-4) var(--sp-2);
+}
+
+.pal-search-icon {
+  position: absolute;
+  left: var(--sp-2);
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.pal-search-input {
+  width: 100%;
+  height: 30px;
+  /* Room for the icon on the left and the clear button on the right, so
+     neither can ever sit on top of the text. */
+  padding: 0 26px 0 calc(var(--sp-2) + 14px + var(--sp-2));
+  border: var(--bw) solid var(--border-strong);
+  border-radius: var(--r-btn);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+
+.pal-search-input::placeholder {
+  color: var(--text-faint);
+}
+
+.pal-search-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  border-color: var(--accent);
+}
+
+/* The type=search decorations differ per browser and none of them match
+   this control, so they are removed and replaced by the button below. */
+.pal-search-input::-webkit-search-decoration,
+.pal-search-input::-webkit-search-cancel-button,
+.pal-search-input::-webkit-search-results-button {
+  appearance: none;
+}
+
+.pal-search-clear {
+  position: absolute;
+  right: var(--sp-1);
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.pal-search-clear:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.pal-search-clear:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* An armed annotation tool. The canvas already switches to a crosshair, but
+   that is only visible where the pointer is; a student who looks back at the
+   rail to ask "did that do anything?" needs the answer there too. */
+.pal-row.is-armed {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.pal-row.is-armed .pal-glyph {
+  color: var(--accent);
+}
+
+.pal-empty {
+  padding: var(--sp-2) var(--sp-4) var(--sp-4);
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-dim);
+}
+
+.pal-group-title {
+  padding: var(--sp-2) var(--sp-4) var(--sp-1) calc(var(--sp-4) + 22px + var(--sp-3));
+  color: var(--text-faint);
+}
+
+.pal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Row
+
+   Full-bleed, square-cornered. Square is deliberate: a full-bleed row that
+   is also rounded leaves slivers of panel showing at its corners, and the
+   active-preset marker can then sit in the gutter without producing the
+   rounded-box-with-a-coloured-edge shape the design rules forbid.
+   -------------------------------------------------------------------------- */
+
+/* --------------------------------------------------------------------------
+   A component row and its explain mark.
+
+   The <li> becomes the flex line so the mark can sit beside the button
+   without being inside it. The button still takes all the width it can, so
+   the click and drag target is unchanged from when it was the only child.
+   -------------------------------------------------------------------------- */
+
+.pal-item {
+  display: flex;
+  align-items: center;
+}
+
+/* The mark is quiet until the row is engaged. Thirty-three permanent question
+   marks down a 224px rail would read as clutter and compete with the names
+   they annotate; revealed on hover or focus they are exactly as discoverable
+   as they need to be, and a keyboard user reaches one by tabbing.
+
+   `opacity`, not `display`, so the space is always reserved: the names must
+   not shift sideways when a row is hovered. */
+.pal-explain {
+  flex: none;
+  display: grid;
+  place-items: center;
+  /* CONTAINING BLOCK FOR THE .sr-only LABEL INSIDE IT.
+
+     .sr-only is `position: absolute` with a 1px box. Absolute positioning
+     resolves against the nearest POSITIONED ancestor, and without this line
+     there is none until far up the tree, so all 33 labels anchored to a
+     distant ancestor and were laid out at their own document offsets rather
+     than here. Individually invisible, collectively they extended the
+     document's scroll box by 638px, and the whole fixed-viewport app could
+     be scrolled off the top of the window.
+
+     Measured, not theorised: documentElement.scrollHeight was 1639 against a
+     1001px viewport, and window.scrollTo(0, 900) moved the app. Verified
+     back to a non-scrolling page after this rule. */
+  position: relative;
+  /* 24px: the minimum comfortable pointer target. It was 20px wide — under
+     the guideline, on a mark whose entire job is to be aimed at. */
+  width: 24px;
+  height: 24px;
+  margin-right: var(--sp-2);
+  border-radius: var(--r-sm);
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-med);
+  line-height: 1;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+
+.pal-item:hover .pal-explain,
+.pal-explain:focus-visible,
+.pal-explain[data-open='true'] {
+  opacity: 1;
+}
+
+/* Engaged, it takes the same accent treatment every other .term does; the
+   shared rules in Tooltip.css supply the tint, this only raises the ink so
+   the glyph itself is legible rather than staying at --text-faint. */
+.pal-explain:hover,
+.pal-explain[data-open='true'] {
+  color: var(--accent-ink);
+}
+
+.pal-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: 40px;
+  padding: 0 var(--sp-4);
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-body);
+  line-height: var(--lh-base);
+  letter-spacing: var(--tr-base);
+  text-align: left;
+  cursor: grab;
+  transition: background-color var(--dur-fast) var(--ease);
+}
+
+/* Same 44px floor the shared .btn takes under a coarse pointer (index.css):
+   a professor picking components at a smartboard taps these rows with a
+   finger, and 40px is under the floor. Width is already full-rail. */
+@media (pointer: coarse) {
+  .pal-row {
+    min-height: 44px;
+  }
+
+  .pal-search-input {
+    height: 44px;
+    padding-right: 44px;
+  }
+
+  .pal-search-clear {
+    width: 44px;
+    height: 44px;
+    right: 0;
+  }
+}
+
+.pal-row:hover {
+  background: var(--surface-2);
+}
+
+.pal-row:active {
+  background: var(--surface-3);
+  cursor: grabbing;
+}
+
+.pal-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 0;
+}
+
+/* The chip. 22px is the smallest square that holds a 14px glyph with even
+   optical margin on all four sides. It never shrinks: `flex: none` is what
+   stops a long kind name squeezing it into a rectangle. */
+.pal-glyph {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: var(--bw) solid var(--k-stroke, var(--border-strong));
+  border-radius: var(--r-sm);
+  background: var(--k-fill, var(--surface-2));
+  color: var(--k-ink, var(--text-dim));
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+/* The chip lifts very slightly on hover — enough to say "this is the thing
+   you are about to drag", not enough to read as motion. */
+.pal-row:hover .pal-glyph {
+  transform: scale(1.06);
+}
+
+/* The carry: what the pointer holds once a row is picked up. Three layers,
+   each owning ONE transform so none of them fight. The outer .pal-carry
+   jumps to the pointer with no easing at all, because position lagging the
+   cursor reads as sluggishness; .pal-carry-pop owns centring and the pickup
+   pop; the card itself owns the velocity tilt, eased by its own transition.
+   pointer-events: none keeps it out of every hit test, so the canvas's drop
+   handling never knows it exists. Everything here is transform and opacity,
+   compositor work only, and the global reduced-motion rule in index.css
+   flattens the pop and the tilt to nothing. */
+.pal-carry {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 500; /* above the tooltip layer (400): nothing outranks the hand */
+  pointer-events: none;
+  will-change: transform;
+}
+
+@keyframes pal-carry-pop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.pal-carry-pop {
+  transform: translate(-50%, -50%);
+  animation: pal-carry-pop var(--dur-base) var(--ease-out);
+}
+
+/* The card: the row's chip and name on the node radius with a lift shadow,
+   because the thing being carried is a component about to exist on the
+   canvas, not a line of a list. Colour comes through the same [data-kind]
+   contract as the chip it clones. */
+.pal-carry-card {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4) var(--sp-2) var(--sp-3);
+  border: var(--bw) solid var(--k-stroke, var(--border-strong));
+  border-radius: var(--r-node);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--fs-base);
+  white-space: nowrap;
+  transition: transform var(--dur-base) var(--ease);
+}
+
+.pal-carry-name {
+  font-weight: var(--fw-med);
+}
+
+/* Off-screen parking for the static fallback, when the blank drag image is
+   not decoded yet: the same card, sampled once by setDragImage. */
+.pal-carry-park {
+  position: fixed;
+  top: -1000px;
+  left: -1000px;
+}
+
+/* The concept over the product. Stacked rather than side by side: a rail is
+   224px and "Elastic Load Balancing (Application Load Balancer)" does not
+   share a line with anything. */
+.pal-names {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+
+/* The vendor's own name for the thing, quiet beneath it. Truncated rather
+   than wrapped, because a rail row that grows to three lines pushes the
+   rest of the list off the screen. */
+.pal-vendor {
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pal-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* "Circuit breaker" and "Load balancer" both fit a 200px rail, but a
+     narrowed rail must truncate rather than wrap a row to two lines. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Preset rows
+
+   Taller than a component row because they carry two lines, and a click
+   here replaces the whole canvas — an inviting target, not a list item.
+   -------------------------------------------------------------------------- */
+
+.pal-row-preset {
+  align-items: flex-start;
+  min-height: 48px;
+  padding-top: var(--sp-2);
+  padding-bottom: var(--sp-2);
+  gap: var(--sp-2);
+  cursor: pointer;
+}
+
+.pal-row-preset:active {
+  cursor: pointer;
+}
+
+/* The active marker occupies a slot on every row, filled or not, so the
+   preset names all sit on one left axis regardless of which is loaded.
+   22px matches the component chip, so the two lists share an axis too. */
+.pal-mark {
+  flex: none;
+  width: 22px;
+  /* Matches the cap height of the first line, so the dot sits on the
+     name's optical centre rather than the row's geometric one. */
+  height: 22px;
+  position: relative;
+}
+
+.pal-mark::after {
+  --pal-dot: 6px;
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--pal-dot);
+  height: var(--pal-dot);
+  /* Half the dot, back up and left, to centre it on the 50%/50% origin. */
+  margin: calc(var(--pal-dot) / -2) 0 0 calc(var(--pal-dot) / -2);
+  border-radius: var(--r-pill);
+  background: transparent;
+  transition: background-color var(--dur-fast) var(--ease);
+}
+
+.pal-row-preset[data-active] .pal-mark::after {
+  background: var(--accent);
+}
+
+.pal-row-preset[data-active] .pal-name {
+  font-weight: var(--fw-med);
+  color: var(--accent-ink);
+}
+
+.pal-preset-text {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* A preset name may run to two lines rather than truncate — the name is the
+   thing being chosen, so it is never abbreviated. The row grows instead. */
+.pal-row-preset .pal-name {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: var(--lh-sm);
+}
+
+/* The note is the reason to click this row, so it reads as prose in
+   sentence case rather than as an uppercase tag. Overrides the .label
+   defaults it inherits from the markup. */
+/* The one-line promise under a preset name.
+
+   Plain prose, and NOT built on .label: it used to carry that class and then
+   override every single property .label had set (size, weight, line-height,
+   tracking, transform, colour). A base class that has to be completely
+   neutralised was the wrong base class. */
+.pal-note {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-faint);
+}
+
+.pal-row-preset:hover .pal-note {
+  color: var(--text-dim);
+}
+
+/* --------------------------------------------------------------------------
+   Keyboard reference
+
+   A definition list, aligned on one axis. The key caps are the only
+   bordered boxes in the rail, and they earn it: a cap has to look like a
+   key or it reads as emphasis.
+   -------------------------------------------------------------------------- */
+
+.pal-keylist {
+  margin: 0;
+  padding: var(--sp-1) var(--sp-4) 0;
+}
+
+.pal-keyrow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  min-height: 28px;
+}
+
+.pal-key {
+  flex: none;
+  /* Wide enough for "Shift", the longest cap, so every description starts
+     on the same axis instead of stepping in and out with the key width. */
+  width: 44px;
+  padding: var(--sp-1) 0;
+  border: var(--bw) solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-med);
+  line-height: var(--lh-label);
+  letter-spacing: 0;
+  text-align: center;
+}
+
+.pal-keydesc {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-dim);
+}

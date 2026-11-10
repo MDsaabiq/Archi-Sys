@@ -1,0 +1,1627 @@
+/* ==========================================================================
+   App shell.
+
+   Fixed viewport: the page itself never scrolls. Every region that can
+   overflow scrolls inside itself, so the top bar and the metrics strip stay
+   put no matter how long the topology or the config form gets.
+
+   This file owns the GRID ONLY, plus the wordmark that lives in the bar.
+   Each panel paints its own surface, border and padding in its own
+   stylesheet, so a panel can be moved between grid slots without dragging
+   its appearance along with it.
+   ========================================================================== */
+
+/* The canvas is the app, so it gets the whole window and everything else
+   floats over it. A grid row for a bar would reserve 72px of screen from the
+   one thing the reader came to look at, on every screen size, forever. */
+.app {
+  position: relative;
+  height: 100vh;
+  /* dvh keeps things reachable on mobile browsers whose toolbars collapse. */
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* --------------------------------------------------------------------------
+   Top bar.
+
+   Sized to its contents rather than to a magic number. The traffic control
+   carries the 34px p99 hero under its caption plus a slider with a scale
+   row beneath it; the old fixed 56px could not hold that and the panel had
+   to defend itself with a compensating margin. A min-height with real
+   vertical padding lets the bar be as tall as the type honestly needs, and
+   nothing inside it has to work around the container any more.
+   -------------------------------------------------------------------------- */
+
+/* An island floating over the canvas, not a bar dividing the window.
+
+   It keeps a surface and a shadow rather than going transparent: the things
+   on it are live numbers and a control, and text sitting directly on a
+   moving diagram is unreadable. What it gives up is the full-width rule and
+   the 72px of reserved height, so the canvas runs edge to edge underneath.
+
+   pointer-events are returned to the children, so the gap between the brand
+   and the readouts is canvas you can actually drag through. */
+.app-bar {
+  position: absolute;
+  top: var(--sp-3);
+  left: var(--sp-3);
+  right: var(--sp-3);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  /* The BAR itself is only a positioning strip: it paints nothing and
+     catches nothing, so the canvas between its islands is draggable. Each
+     island below carries its own surface. */
+  background: none;
+  pointer-events: none;
+}
+
+/* An island. Three of them: the wordmark and history on the left, the load
+   control in the middle, the readouts and the menu on the right. Grouping
+   them this way rather than as one long bar is what leaves canvas visible
+   between them, which is the whole point of floating over it. */
+.app-island {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  /* One height for all three, so they read as a row of islands rather than
+     as three unrelated boxes. The load control is the tallest thing here
+     (a slider over its scale row), so it sets the number and the others
+     match it instead of each sizing to its own contents. */
+  min-height: 56px;
+  padding: 0 var(--sp-3);
+  border: var(--bw) solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  pointer-events: auto;
+}
+
+/* The load control takes the slack, but only up to a point: allowed to grow
+   without limit it spans the window and the three islands read as one solid
+   bar again, which is the thing this layout exists to stop. Capped, the
+   canvas shows between them on a wide screen and the island shrinks
+   gracefully on a narrow one. */
+.app-island-load {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 940px;
+}
+
+/* Pushes the menu to the far right, leaving the gap between it and the load
+   island as visible canvas rather than as dead space inside a bar. */
+.app-island-menu {
+  margin-left: auto;
+  gap: var(--sp-1);
+}
+
+/* The source link carries the mark alone, so it reads as an icon button
+   rather than borrowing the accent that means "you did this" in this app. */
+.app-source-link {
+  color: var(--text-dim);
+  text-decoration: none;
+}
+
+.app-source-link:hover {
+  color: var(--text);
+}
+
+/* With a star count, the button is no longer a pure icon square: it grows
+   into a pill just wide enough for the mark and the digits, per this app's
+   own rule that every number renders in the mono stack with tabular
+   figures. Width is the only thing that changes, so neighbouring buttons in
+   the bar never shift. */
+.app-source-link.has-stars {
+  width: auto;
+  padding: 0 var(--sp-3) 0 var(--sp-2);
+  gap: var(--sp-1);
+}
+
+.app-source-stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 16px; /* matches the GitHub mark's box exactly, so the two sit on one line */
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+  line-height: 16px;
+  color: var(--text);
+  /* Fades in on arrival rather than snapping in, because the button next to
+     it is otherwise static chrome and a number appearing with no transition
+     reads as a layout bug rather than as data that just arrived. */
+  animation: app-stars-in var(--dur-slow) var(--ease-out);
+}
+
+/* Positioning context for the glyph and its rays, sized to the GitHub
+   mark's own 16px box so the two sit on one line: a visibly smaller glyph
+   is what read as misaligned earlier even though both boxes were already
+   centred vertically. */
+.app-source-star-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  /* --warn rather than --accent: this button's own comment says the accent
+     colour means "you did this" in this app, and a star is not that. --warn
+     is the closest token to the amber GitHub itself stars with. */
+  color: var(--warn);
+}
+
+.app-source-star-glyph {
+  flex: none;
+}
+
+/* A light sweep across the button on hover: the widely used pattern of a
+   narrow skewed gradient strip parked off the left edge and slid across,
+   clipped by the button's own overflow. It is one transform on one
+   pseudo-element, so it composites on the GPU and never touches layout.
+   Chosen over a sparkle burst because this button sits beside live
+   simulation numbers, and a sweep reads as polish where a burst competes
+   for the eye. */
+.app-source-link.has-stars {
+  position: relative;
+  overflow: hidden;
+}
+
+.app-source-link.has-stars::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -60%;
+  width: 28px;
+  background: linear-gradient(90deg, transparent, var(--sheen), transparent);
+  /* Driven as a TRANSITION rather than a keyframe run, so the highlight is a
+     real position the button eases to and back from: entering sweeps it
+     across, leaving sweeps it home again, and a pointer that turns back
+     halfway is followed rather than ignored. Transformed rather than moved
+     by `left`, so each frame is compositor work and the sweep never costs
+     the running simulation a layout pass. */
+  transform: translateX(0) skewX(-20deg);
+  pointer-events: none;
+  transition: transform var(--dur-slow) var(--ease-out);
+}
+
+.app-source-link.has-stars:hover::after {
+  transform: translateX(190px) skewX(-20deg);
+}
+
+@keyframes app-stars-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-source-stars {
+    animation: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Wordmark.
+
+   Name over tagline, set tight so the pair reads as one block and the bar
+   does not grow to accommodate two separate lines of leading.
+   -------------------------------------------------------------------------- */
+
+.app-brand {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.app-title {
+  margin: 0;
+  font-size: var(--fs-base);
+  line-height: var(--lh-label);
+  font-weight: var(--fw-num);
+  letter-spacing: var(--tr-base);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* The tagline is the friendliest sentence in the app, so it gets real prose
+   sizing rather than being shrunk into a caption. --text-dim, not
+   --text-faint: this is a sentence to be read, not a unit annotation. */
+.app-tagline {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-label);
+  font-weight: var(--fw-body);
+  letter-spacing: var(--tr-sm);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* The traffic control takes the rest of the bar. min-width:0 lets it
+   actually shrink instead of forcing the bar wider than the viewport. */
+/* The saved indicator.
+
+   Deliberately quiet. It answers a question a student asks once ("will I
+   lose this?") and then stops mattering, so it earns a dot and a word and
+   no more. Beside the wordmark because that is where the app talks about
+   itself rather than about the system on the canvas. */
+.app-saved {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sp-1);
+  width: 56px;
+  margin: 0;
+  font-size: var(--fs-label);
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.app-saved-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok-mark);
+  transition: background-color var(--dur-base) var(--ease);
+}
+
+/* Amber while writing, green once written. Not a spinner: the write takes
+   400ms of debounce and then microseconds, so an animation would be motion
+   for something that is already over. */
+.app-saved.is-saving .app-saved-dot {
+  background: var(--warn-mark);
+}
+
+/* Below the tagline's own breakpoint: on a narrow bar the diagram matters
+   more than a reassurance that has already been read once. */
+@media (max-width: 1620px) {
+  .app-saved {
+    display: none;
+  }
+}
+
+/* The traffic control now sits inside its island rather than directly in
+   the bar, so the selector follows it down a level. */
+.app-island-load > .traffic {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Glossary button.
+
+   The plain .btn, not the primary one. This is a reference a student reaches
+   for when they are stuck, never the action the app wants them to take next,
+   and spending the accent on it would compete with Play for the one piece of
+   emphasis the bar is allowed.
+
+   flex:none so the traffic control gives up width first: the load slider can
+   usefully be narrower, whereas this button is already at its natural size
+   and clipping the word "Glossary" would destroy the only reason it beats an
+   icon.
+   -------------------------------------------------------------------------- */
+
+.app-glossary {
+  flex: none;
+}
+
+/* Labelled rather than an icon alone: this one is worth the width, because
+   it is the control that turns a design into something someone else can
+   see, and an unlabelled glyph is exactly how it stayed undiscovered. */
+.app-share-btn {
+  flex: none;
+  display: inline-flex;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+/* "Can you break it?" says it in full where there is room and shorter on a
+   narrow window. Never as its icon alone: a phone has no hover to show the
+   title, and a bare bolt says nothing to someone who has not used it. Its
+   aria-label says it in full at every width. */
+.app-break-short {
+  display: none;
+}
+
+@media (max-width: 899px) {
+  .app-break-long {
+    display: none;
+  }
+
+  .app-break-short {
+    display: inline;
+  }
+}
+
+/* On a phone the star count gives up its room to that label. */
+@media (max-width: 639px) {
+  .app-source-stars {
+    display: none;
+  }
+
+  /* Back to the plain .btn-icon square. */
+  .app-source-link.has-stars {
+    width: 36px;
+    padding: 0;
+  }
+}
+
+/* The menu button and the menu it opens. Relative, so the menu can anchor
+   under the button rather than to the bar's far corner. */
+.app-menu-wrap {
+  position: relative;
+  flex: none;
+}
+
+.app-menu-btn {
+  flex: none;
+}
+
+.app-menu-btn[aria-expanded='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* The shortcut, printed on the control that performs it, so it is learnable
+   without opening anything. --text-faint and no border: it is an annotation
+   on the label, not a second thing to read, and the surrounding button
+   already carries the frame that a standalone key cap would need. */
+.app-glossary-key {
+  margin-left: var(--sp-1);
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-med);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* --------------------------------------------------------------------------
+   The bar's width cascade. What gives way, in order:
+
+     1. 1900  the printed shortcut keys and the widest gaps. Annotations,
+              and the shortcuts dialog documents every binding.
+     2. 1700  the reference labels collapse to their icons. aria-label and
+              the titles keep the names at every width.
+     3. 1620  the tagline. Charm, not information.
+     4. 1360  the rails narrow and the bar's padding tightens (below).
+     5. ~T860 the secondary readouts (Goodput / Errors / Dropped) go —
+              but that step lives on the TRAFFIC CONTROL'S OWN WIDTH as a
+              container query in Inspector.css, not on the viewport,
+              because what the readouts actually compete with is the
+              slider beside them, not the window.
+     6. 1000  the bar's remaining gaps tighten.
+
+   What never gives way: the load slider (the cause), the p99 hero (the
+   effect), and the transport. They are the app.
+
+   THE THRESHOLDS SIT ABOVE THE POINT WHERE A STEP DOWN IN PRIORITY WOULD
+   OTHERWISE FIRE, not merely above the bar's min-content. Measured with
+   the icon transport (118px) and all four reference buttons labelled:
+   brand 170 + undo 68 + buttons 493 + six 40px gaps + padding leaves the
+   traffic control less than its 860px readout threshold below ~1910, so
+   the keys go at 1900 or the ANNOTATIONS would outlive the READOUTS; the
+   same arithmetic with sp-5 gaps (chrome ~828) puts the label step at
+   1700. Each step keeps every control on screen and the priority order
+   intact down to the next one.
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 1900px) {
+  .app-glossary-key {
+    display: none;
+  }
+
+  .app-bar {
+    gap: var(--sp-5);
+  }
+}
+
+@media (max-width: 1700px) {
+  .app-glossary-label {
+    display: none;
+  }
+}
+
+@media (max-width: 1620px) {
+  .app-tagline {
+    display: none;
+  }
+}
+
+/* Pressed state. The sheet is open and this is what closes it, so the button
+   reads as engaged rather than as an inert label beside its own panel. */
+.app-glossary[aria-expanded='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.app-glossary[aria-expanded='true'] .app-glossary-key {
+  color: var(--accent-ink);
+}
+
+/* --------------------------------------------------------------------------
+   Body: the canvas is the whole area below the bar, and every panel FLOATS
+   over it.
+
+   The panels used to be flex SIBLINGS of the stage, so opening one resized
+   the canvas and every node visibly slid sideways. That is backwards: the
+   panels are chrome ABOVE the drawing, not walls beside it, which is the
+   same structure that makes Excalidraw feel like a canvas app. Here the
+   stage always spans the full body, the slots are absolutely positioned on
+   top of it, and toggling a panel therefore cannot change the canvas's
+   viewport rect at all. A node stays on the same screen pixel through any
+   panel toggle, including mid-drag.
+
+   The rails are FIXED width. They hold a grouped component list and a
+   config form; neither reads better wider, and a wide rail now costs canvas
+   the student can see, not just canvas the layout gives up.
+
+   The geometry lives in the three custom properties below, because FOUR
+   consumers must agree on it: the slot itself, the toggle button that must
+   clear it, the canvas corner chrome that must clear it, and the .stage-safe
+   sentinel the canvas measures for fit. One token each, no copies.
+
+   `has-library` / `has-inspector` / `has-metrics` are set by the shell and
+   mean "this panel is open". They flip at the START of a close (the slot is
+   still sliding out), which is deliberate: the chrome transitions back into
+   the reclaimed space over the same duration the panel takes to leave.
+   -------------------------------------------------------------------------- */
+
+.app-body {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+
+  /* Where the floating bar ends, plus a gap: its 12px offset, its 56px
+     height, and 12px below it. Everything that must clear the bar reads this
+     one number rather than restating the arithmetic.
+
+     App.tsx MEASURES the bar and overwrites this inline. The constant is the
+     value used for the first paint, before the observer has run, and it is
+     the one-row desktop height. It stopped being correct on its own once the
+     bar could wrap: on a phone the bar stands over 200px tall and a constant
+     put the components toggle underneath it. */
+  --bar-clear: 80px;
+
+  --rail-w: 224px;
+  --ins-w: 320px;
+  /* The strip's height is a FIXED clamp, not content-sized. As an overlay
+     its height is part of the shell's geometry contract (the sentinel, the
+     toggles and the ledger all need the same number), and its charts
+     already scroll internally when they want more. 26vh capped at 260px
+     keeps the diagram the dominant half of the screen at every window. */
+  --strip-h: clamp(196px, 26vh, 260px);
+  /* dvh for the same reason .app uses it: on a phone the charts sheet reads
+     this, and vh would size it against a window taller than the visible
+     one. Harmless on a desktop, where the two are identical. */
+  --strip-h: clamp(196px, 26dvh, 260px);
+  /* The height the strip is actually DRAWN at, which is what everything that
+     clears it has to read. --strip-h is the chosen height (the clamp above,
+     or a dragged size written inline); a short window caps it further below.
+     When only the strip's own box took that cap, the ledger, the zoom
+     cluster and the toggle still cleared the uncapped height and floated
+     a band of empty canvas above the strip. */
+  --strip-shown: var(--strip-h);
+}
+
+/* --------------------------------------------------------------------------
+   Panel slots.
+
+   Each collapsible panel sits inside a slot div owned by PanelSlot in
+   App.tsx. The SLOT is absolutely positioned OVER the stage and owns the
+   panel's geometry; the panel fills it and paints its own OPAQUE surface
+   (no translucency: a panel is a place to read, not a window). Motion is a
+   TRANSFORM on the slot, sliding it in from the edge it lives on, so the
+   slide invalidates no layout, and because the slot is out of flow even its
+   mount and unmount leave the canvas's rect untouched.
+
+   A slot translated off its edge is clipped by .app-body (overflow:
+   hidden), so no state of this animation can make the page scrollable.
+
+   z-index: the rails sit above the strip only as a tie-break; the strip is
+   inset past any open rail (below) so the three never actually overlap and
+   no chart is ever hidden behind a rail. All of it stays under the toast
+   (300) and the tooltip layer (400).
+   -------------------------------------------------------------------------- */
+
+.app-slot {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Both rails scroll internally via the shared .scroll primitive and paint
+   their own surface. The slot only supplies geometry; the hairline that
+   separates a panel from the canvas is the panel's own border. */
+.app-slot-left {
+  position: absolute;
+  /* Below the floating bar rather than behind it, and inset from the window
+     edges so the rounded corners are visible on all four sides. */
+  top: var(--bar-clear);
+  bottom: var(--sp-3);
+  left: var(--sp-3);
+  width: var(--rail-w);
+  z-index: 10;
+}
+
+/* The rail is an island too, now that it no longer runs to the top of the
+   window. A full-height panel could end flat against the frame; one that
+   starts partway down cannot, because the cut edge reads as clipped rather
+   than as designed. */
+.app-slot-left > .pal {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: var(--bw) solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.app-slot-right {
+  position: absolute;
+  top: var(--bar-clear);
+  bottom: var(--sp-3);
+  right: var(--sp-3);
+  width: var(--ins-w);
+  z-index: 10;
+}
+
+.app-slot-right > .ins {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: var(--bw) solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+/* --------------------------------------------------------------------------
+   Stage: the full-body canvas, with the metrics strip floating at its foot.
+
+   The stage is the only in-flow child of the body, so it takes the whole
+   area under the bar; the strip is absolute within it, pinned to the
+   bottom and inset past whichever rails are open, so a selected node's
+   knobs and the system's charts stay legible side by side.
+   -------------------------------------------------------------------------- */
+
+.app-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The canvas and the chrome that floats over it. A positioning root so the
+   panel toggles can sit at its corners; the toggles are siblings of the
+   Canvas component, outside .cv-surface, so the canvas gesture router never
+   sees a press on them. */
+.stage-canvas {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Floating panel toggles.
+
+   One 32px button per collapsible panel, pinned to the canvas edge that
+   panel occupies, present in BOTH states. Collapsing a panel therefore
+   never leaves a dead edge — the control that closed it is still sitting
+   where the panel was, ready to bring it back — and the open state carries
+   no extra chrome beyond the same small button.
+
+   Quiet on purpose: the resting colour is --text-dim (6.71:1 on --surface,
+   AA) and the open state is NOT the accent — these are layout switches,
+   not modes, and lighting them like Play would spend emphasis the bar owns.
+   -------------------------------------------------------------------------- */
+
+.stage-toggle {
+  position: absolute;
+  z-index: 5;
+  color: var(--text-dim);
+  /* The offset properties ride the panel slide (--dur-base, same clock);
+     the rest restates .btn's own interactive transition, because a
+     shorthand here would otherwise erase it. The global reduced-motion
+     rule in index.css shortens all of these to nothing. */
+  transition:
+    left var(--dur-base) var(--ease),
+    right var(--dur-base) var(--ease),
+    bottom var(--dur-base) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+
+.stage-toggle:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.stage-toggle-library {
+  /* Below the floating bar, not under it. */
+  top: var(--bar-clear);
+  left: var(--sp-3);
+}
+
+.stage-toggle-inspector {
+  top: var(--bar-clear);
+  right: var(--sp-3);
+}
+
+/* Bottom-left, above the strip when it is open. The canvas ledger yields
+   this corner (see .cv-ledger in Canvas.css). */
+.stage-toggle-metrics {
+  bottom: var(--sp-3);
+  left: var(--sp-3);
+}
+
+/* --------------------------------------------------------------------------
+   Chrome vs. floating panels.
+
+   With the panels overlaying the canvas, anything pinned to a canvas edge
+   would land UNDER an open panel. Each piece of edge chrome therefore
+   shifts past the panel on its edge, keyed off the same has-* classes and
+   width tokens the slots use, so the two can never disagree about where a
+   panel ends. The toggles keep their rule of living where their panel
+   lives, in both states: the button that closed a panel is the button that
+   reopens it, now sitting flush against the panel's edge.
+
+   The .cv-ledger / .cv-zoom overrides reach into the canvas's chrome from
+   here on purpose: only the shell knows the panel state, and the offsets
+   are the shell's own geometry tokens. Canvas.css still owns their look.
+   -------------------------------------------------------------------------- */
+
+/* Clears the rail plus BOTH gaps: the rail is inset from the window edge
+   now, so the old single gap left the toggle sitting on the panel. */
+.app-body.has-library .stage-toggle-library {
+  left: calc(var(--rail-w) + var(--sp-3) * 2);
+}
+
+.app-body.has-inspector .stage-toggle-inspector {
+  right: calc(var(--ins-w) + var(--sp-3) * 2);
+}
+
+/* Clears the rail plus BOTH gaps, like the other toggles: the rail is inset
+   from the window edge now, so a single gap leaves this touching it. */
+.app-body.has-library .stage-toggle-metrics {
+  left: calc(var(--rail-w) + var(--sp-3) * 2);
+}
+
+.app-body.has-metrics .stage-toggle-metrics {
+  bottom: calc(var(--strip-shown) + var(--sp-3) * 2);
+}
+
+/* The ledger sits to the right of the metrics toggle (32px + two gaps, the
+   same sum Canvas.css documents on .cv-ledger) and follows it past an open
+   rail; both it and the zoom cluster ride up over the open strip. */
+.app-body.has-library .cv-ledger {
+  left: calc(var(--rail-w) + var(--sp-3) * 2 + 32px + var(--sp-3));
+}
+
+.app-body.has-metrics .cv-ledger,
+.app-body.has-metrics .cv-zoom {
+  bottom: calc(var(--strip-shown) + var(--sp-3) * 2);
+}
+
+/* The format bar rides the same lift, one row higher so it clears the
+   ledger and the zoom cluster it shares the foot of the canvas with. */
+.app-body.has-metrics .cv-format {
+  bottom: calc(var(--strip-shown) + var(--sp-3) * 2 + 32px + var(--sp-3));
+}
+
+.app-body.has-inspector .cv-zoom,
+.app-body.has-inspector .mm {
+  right: calc(var(--ins-w) + var(--sp-3) * 2);
+}
+
+/* The inspector toggle sits at the top right of the canvas, so the map drops
+   below it rather than starting level with it. */
+.app-body .mm {
+  top: calc(var(--bar-clear) + 32px + var(--sp-2));
+}
+
+.cv-ledger,
+.cv-zoom {
+  transition:
+    left var(--dur-base) var(--ease),
+    right var(--dur-base) var(--ease),
+    bottom var(--dur-base) var(--ease);
+}
+
+/* --------------------------------------------------------------------------
+   The uncovered-canvas sentinel.
+
+   THE ANSWER TO "part of the diagram is underneath a panel". The canvas
+   spans the whole stage, so with panels open some of it is covered; a
+   student must still always be able to reach every node. This invisible,
+   inert div is kept inset to exactly the UNCOVERED area, and the canvas
+   measures it (Canvas's visibleRef) whenever it aims the camera: zoom-to-
+   fit frames content inside this rect, palette clicks and off-pointer
+   pastes land at its centre, and keyboard zoom pivots on it. Content
+   therefore never STARTS under a panel, and anything dragged or panned
+   under one is one fit press (Shift+1) or a short pan from reachable,
+   with panning itself unlimited.
+
+   It is measured, never subscribed to: toggling a panel changes this rect
+   but triggers no camera move, which is precisely the point.
+
+   visibility: hidden and pointer-events: none, and it sits OUTSIDE
+   .cv-surface, so the canvas gesture router can never see it.
+   -------------------------------------------------------------------------- */
+
+.stage-safe {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Each panel floats --sp-3 in from the stage's edge, so its far side is
+   that much further in than its width. Without the inset a fit that took
+   the tight margin (see FIT_MIN_TIGHT in fit.ts) ran a card's frame up
+   against the panel's edge. */
+.app-body.has-library .stage-safe {
+  left: calc(var(--rail-w) + var(--sp-3));
+}
+
+.app-body.has-inspector .stage-safe {
+  right: calc(var(--ins-w) + var(--sp-3));
+}
+
+.app-body.has-metrics .stage-safe {
+  bottom: calc(var(--strip-shown) + var(--sp-3));
+}
+
+/* The bar floats over the top of the canvas on a desktop, as opaque as any
+   panel, and a tall diagram fitted to the full height had its top row under
+   it. A phone's header is not over the canvas, so it needs nothing here. */
+@media (min-width: 721px) {
+  .stage-safe {
+    top: var(--bar-clear);
+  }
+}
+
+/* The strip: pinned to the stage's foot, --strip-h tall (rationale on the
+   token), and inset past any OPEN rail so the three panels tile instead of
+   stacking: a rail over the strip's end would hide live charts behind an
+   opaque surface, and z-order cannot fix what tiling prevents outright. */
+.app-slot-bottom {
+  position: absolute;
+  /* Inset like the rails, so all three panels are islands of the same
+     family rather than one floating and two welded to the frame. The
+     has-library / has-inspector rules below add the rail's width on top. */
+  left: var(--sp-3);
+  right: var(--sp-3);
+  bottom: var(--sp-3);
+  height: var(--strip-shown);
+  flex-direction: column;
+  z-index: 9;
+  /* The charts reflow against the STRIP's own width, which is the stage
+     minus whichever rails are open; a viewport media query cannot see
+     that, and since the strip became an overlay neither can a query on
+     the stage (always full width now). Metrics.css @container rules
+     resolve against this box. */
+  container-type: inline-size;
+  container-name: stage;
+}
+
+.app-body.has-library .app-slot-bottom {
+  left: calc(var(--rail-w) + var(--sp-3) * 2);
+}
+
+.app-body.has-inspector .app-slot-bottom {
+  right: calc(var(--ins-w) + var(--sp-3) * 2);
+}
+
+/* The frame is on the SLOT and the scrolling is on the panel inside it.
+
+   Both on one element does not work: a scrollbar lives inside the padding
+   box, so an element that is both rounded and scrollable has its scrollbar
+   squaring off the two corners on that side. Splitting them lets the slot
+   clip the panel to the radius while the panel scrolls freely underneath. */
+.app-slot-bottom {
+  border: var(--bw) solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.app-slot-bottom > .mx {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* The fixed height can only be honoured if the strip is allowed to
+     scroll rather than spill its charts over the canvas above it.
+
+     Styled through the shared .scroll primitive's tokens rather than left to
+     the browser: the default track is opaque grey, which drew a bar down the
+     strip's right edge and squared off the two corners the slot had just
+     rounded. */
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+  overscroll-behavior: contain;
+  background: var(--surface);
+}
+
+.app-slot-bottom > .mx::-webkit-scrollbar {
+  width: 12px;
+}
+
+.app-slot-bottom > .mx::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-slot-bottom > .mx::-webkit-scrollbar-thumb {
+  border: 4px solid transparent;
+  border-radius: var(--r-pill);
+  background: var(--line);
+  background-clip: content-box;
+}
+
+.app-slot-bottom > .mx::-webkit-scrollbar-thumb:hover {
+  background: var(--line-2);
+  background-clip: content-box;
+}
+
+/* --------------------------------------------------------------------------
+   Panel motion.
+
+   Slide from the panel's own edge, never a fade in place: a fade reads as
+   an overlay arriving, a slide from the edge reads as part of the frame
+   moving. Entrances take --ease-out (fast start, settled landing), exits
+   take --ease. Nothing here exceeds 200ms.
+
+   These are keyframe animations rather than transitions because the exit
+   needs a completion event: PanelSlot unmounts the panel on animationend,
+   which is also why the reduced-motion block below shortens durations to
+   near zero instead of setting animation: none. With no animation there is
+   no animationend, and a closing panel would wait out the JS fallback
+   timeout before leaving the DOM.
+   -------------------------------------------------------------------------- */
+
+@keyframes app-slot-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes app-slot-out-left {
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes app-slot-in-right {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes app-slot-out-right {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes app-slot-in-bottom {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes app-slot-out-bottom {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+.app-slot-left.is-entering {
+  animation: app-slot-in-left var(--dur-base) var(--ease-out);
+}
+
+.app-slot-right.is-entering {
+  animation: app-slot-in-right var(--dur-base) var(--ease-out);
+}
+
+.app-slot-bottom.is-entering {
+  animation: app-slot-in-bottom var(--dur-base) var(--ease-out);
+}
+
+/* Exits hold their end frame (forwards): the slot stays parked off its edge
+   for the handful of milliseconds between animationend and React removing
+   it, instead of snapping back visible. The .is-closing rules sit after the
+   .is-entering rules so they win the tie when both classes could apply. */
+.app-slot-left.is-closing {
+  animation: app-slot-out-left var(--dur-base) var(--ease) forwards;
+}
+
+.app-slot-right.is-closing {
+  animation: app-slot-out-right var(--dur-base) var(--ease) forwards;
+}
+
+.app-slot-bottom.is-closing {
+  animation: app-slot-out-bottom var(--dur-base) var(--ease) forwards;
+}
+
+/* --------------------------------------------------------------------------
+   The rail step.
+
+   Below this the rails narrow, so the strip and the safe area they inset
+   keep enough width for the charts, and a half-screen split keeps a usable
+   band of uncovered canvas between two open rails. The strip then reflows
+   on its own through container queries in Metrics.css.
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 1360px) {
+  /* A dragged size is written inline on .app-body, which outranks any rule
+     in this file, so these cannot simply restate a narrower number: a rail
+     dragged to 420px on a wide screen would keep all 420px here and leave
+     almost no canvas. The inline value is therefore a MAX rather than the
+     width itself, and the panel takes whichever is smaller. */
+  .app-slot-left {
+    width: min(var(--rail-w), 200px);
+  }
+
+  .app-slot-right {
+    width: min(var(--ins-w), 288px);
+  }
+
+  /* The bar's padding tightens with the rails. */
+  .app-bar {
+    padding: var(--sp-3) var(--sp-4);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   The last width step: a half-screen split (~960 CSS px) and below.
+
+   Everything wordy is already gone; what remains is spacing. The bar's
+   gaps come down to sp-3 and its padding with them, which together with
+   the traffic control's own container steps (Inspector.css) keeps every
+   control on screen down to ~840px, comfortably past a 960 split. Below
+   that a browser window is narrower than any desktop half-screen and the
+   slider is at its floor; there is nothing left to give that the user
+   still needs.
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 1000px) {
+  .app-bar {
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-3);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Short windows.
+
+   Height has a cascade too, or a 1600x700 window loses its canvas to the
+   chrome. The strip is the only region that can honestly give height back:
+   the bar is already sized by its type, and the canvas is the app. Its
+   charts scroll internally by contract (see --strip-h above), so a shorter
+   clamp costs scrolling, never clipping. 24vh of a 700px window is 168px:
+   the p99 chart and the ledger row stay readable, and the canvas keeps
+   ~450px, still the dominant region.
+   -------------------------------------------------------------------------- */
+
+@media (max-height: 720px) {
+  /* Same reasoning as the width override above: a MAX, not a replacement,
+     because the dragged value is inline and would otherwise win. Set on the
+     token rather than on the strip's box, so the controls that clear the
+     strip move down with it. */
+  .app-body {
+    --strip-shown: min(var(--strip-h), clamp(150px, 24vh, 196px));
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Undo / redo cluster.
+
+   Two icon buttons set as one visual unit beside the wordmark. flex:none for
+   the same reason the glossary button is: the slider gives up width first.
+   -------------------------------------------------------------------------- */
+
+.app-history {
+  display: flex;
+  flex: none;
+  gap: var(--sp-1);
+}
+
+/* --------------------------------------------------------------------------
+   Undo / redo receipt.
+
+   Bottom center, floating over the stage: the top bar is where the ACTION
+   lives, but the change it reverted happened on the canvas, so the receipt
+   appears near the work. Plain panel surface and a hairline, no translucency.
+   z-index above the stage chrome (5) and below the tooltip layer (400): a
+   receipt must never cover an explanation the student asked for.
+
+   Motion: entrance only, 160ms, opacity plus a few px of rise; the exit is
+   an unmount because a receipt that lingers while fading invites reading it
+   twice. Under prefers-reduced-motion it simply appears.
+   -------------------------------------------------------------------------- */
+
+.app-toast {
+  position: fixed;
+  bottom: var(--sp-5);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 300;
+  padding: var(--sp-2) var(--sp-4);
+  border: var(--bw) solid var(--border-strong);
+  border-radius: var(--r-btn);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-med);
+  line-height: var(--lh-label);
+  box-shadow: var(--shadow-sm);
+  animation: app-toast-in 160ms var(--ease-out);
+}
+
+@keyframes app-toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* A refused import. Same shape as the receipt, in the danger palette, and
+   wider: this one carries a sentence explaining what was wrong with the
+   file, not a two-word label. --danger on --danger-soft is the pair
+   index.css measures at AA, so the message is readable in both themes. */
+.app-toast-error {
+  max-width: min(46ch, calc(100vw - var(--sp-6)));
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+  text-align: center;
+  text-wrap: balance;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-toast {
+    animation: none;
+  }
+}
+
+/* The file picker behind the Open button. Not display:none, because a
+   hidden input in some browsers stops accepting a programmatic click;
+   taken out of the layout and out of the tab order instead, since the
+   styled button in front of it is what a keyboard reaches. */
+.app-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Reduced motion.
+
+   The panels must still open and close CORRECTLY with the motion removed,
+   which is why this shortens the slide to effectively zero duration rather
+   than setting animation: none. PanelSlot unmounts a closing panel on
+   animationend; an animation that never runs never ends, and the panel
+   would sit inert until the JS fallback timeout. At 0.01ms the event still
+   fires and the panel appears and disappears in place, instantly.
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .app-slot-left.is-entering,
+  .app-slot-right.is-entering,
+  .app-slot-bottom.is-entering,
+  .app-slot-left.is-closing,
+  .app-slot-right.is-closing,
+  .app-slot-bottom.is-closing {
+    animation-duration: 0.01ms;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Phone.
+
+   Below this width the desktop shell stops being a layout and starts being
+   an obstruction: the rail is 224px and the inspector 320px, so on a 390px
+   screen the two panels alone want more room than the window has, and both
+   are absolutely positioned over the canvas. What a reader actually got was
+   a screen of components with a sliver of diagram behind it.
+
+   The fix is not narrower rails. A 200px inspector is unusable for a
+   different reason, and two panels sharing a phone screen leaves nothing
+   for the thing they describe. So on a phone the panels stop being rails
+   beside the canvas and become SHEETS over it: full width, anchored to the
+   bottom edge where a thumb reaches, one at a time. The canvas keeps the
+   whole window and stays the thing you are looking at.
+
+   720px rather than a device query: this is about how much room the shell
+   has, and a small window on a desktop has exactly the same problem. The
+   value is the point where 224 + 320 + four gutters stops leaving the
+   canvas a usable middle.
+
+   Anything reading --rail-w, --ins-w or --strip-h for clearance is
+   neutralised here, because a sheet is not something to sit beside.
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 720px) {
+  /* ------------------------------------------------------------------
+     A phone is a different application shape, not a narrow desktop.
+
+     The desktop is a canvas with chrome FLOATING over it: islands, edge
+     toggles, a zoom cluster, a ledger. That works when the canvas is
+     1600px and the chrome costs a tenth of it. On a 400px screen the same
+     chrome covered a quarter of the screen with the bar, another quarter
+     with the strip, and scattered five more controls over what was left,
+     so the diagram was a band in the middle with things on top of it.
+
+     So the phone gets the layout phones actually use: a fixed header of
+     known height, the canvas taking everything below it, and a tab bar at
+     the bottom where the thumb is. Nothing floats over the canvas except
+     the sheets the tab bar opens. What the reader looks at is the
+     diagram, and every control is on an edge.
+     ------------------------------------------------------------------ */
+
+  /* --- Header: fixed, compact, not an island ---------------------- */
+
+  .app-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    flex-wrap: wrap;
+    gap: 0;
+    padding: 0;
+    /* It is a bar again, not three things floating: at this width the gaps
+       between islands were not canvas you could use, just holes. */
+    background: var(--surface);
+    border-bottom: var(--bw) solid var(--border);
+    pointer-events: auto;
+  }
+
+  .app-island {
+    min-height: 0;
+    gap: var(--sp-2);
+    padding: var(--sp-1) var(--sp-3);
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  .app-island-brand {
+    order: 1;
+    flex: 1 1 auto;
+  }
+
+  /* One identity row: wordmark, undo, redo, Share and the menu. It was two
+     rows with the GitHub link and a labelled Share wrapping under the
+     wordmark, flush to the screen edge, which put the header at 282px of an
+     800px screen. The link now lives in the menu; Share keeps its glyph. */
+  .app-island-menu {
+    order: 2;
+    margin-left: 0;
+    padding-left: 0;
+    gap: var(--sp-2);
+  }
+
+  .app-source-link,
+  .app-share-label {
+    display: none;
+  }
+
+  .app-share-btn {
+    width: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  /* "Can you break it?" keeps a word here (see .app-break-short), since a
+     bare bolt says nothing to someone who has not used it. The glyph gives
+     up its room instead, which is what lets the word fit the one row. */
+  .app-break-btn {
+    width: auto;
+    padding: 0 var(--sp-2);
+  }
+
+  .app-break-btn svg {
+    display: none;
+  }
+
+  /* The load control is the one thing a reader touches constantly, so it
+     gets its own full-width row under the identity row, with a rule
+     between them. */
+  .app-island-load {
+    order: 3;
+    flex: 1 1 100%;
+    max-width: none;
+    border-top: var(--bw) solid var(--border);
+    padding-block: var(--sp-2);
+  }
+
+  .app-tagline,
+  .app-saved {
+    display: none;
+  }
+
+  .app-history {
+    margin-left: auto;
+    gap: var(--sp-2);
+  }
+
+  .app-history .btn {
+    border-color: var(--border-strong);
+    background: var(--surface);
+  }
+
+  /* --- Stage: everything below the header ------------------------- */
+
+  .app-body {
+    top: 0;
+  }
+
+  /* The canvas starts under the fixed header and runs to the tab bar. The
+     stage is a flex child, not positioned, so this is padding: the canvas
+     surface stays full bleed and only its content is held clear. */
+  .app-stage {
+    padding-top: var(--bar-clear);
+    padding-bottom: var(--tabbar-h);
+  }
+
+  /* --- Sheets ----------------------------------------------------- */
+
+  /* FIXED, not absolute.
+
+     Absolutely positioned they resolve against .app-stage, which carries
+     padding for the header and the tab bar, so `bottom: var(--tabbar-h)`
+     was measured from the padded edge and the sheet rendered starting at
+     the bottom of the screen and running 464px below it. The grabber ended
+     up at the very edge of the display and there was no visible way to
+     close the thing. Fixed, they resolve against the viewport, which is
+     what "sits above the tab bar" actually means.
+
+     Height is capped BOTH ways: never taller than the room between the
+     header and the tab bar, so a sheet can never cover the header or run
+     under the bar, and never more than 62vh, so the canvas it explains is
+     always partly visible behind it. */
+  .app-slot-left,
+  .app-slot-right,
+  .app-slot-bottom {
+    position: fixed;
+    /* A floor as well as a ceiling. --bar-clear is measured in JS, so for a
+       frame after the address bar collapses it can still describe the old
+       window; without a hard top the sheet's own height would push its top
+       edge off the screen. `top: auto` lets the height rule position it,
+       and this stops it ever starting above the header. */
+    top: auto;
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+    left: 0;
+    right: 0;
+    width: auto;
+    height: auto;
+    /* dvh, not vh.
+
+       vh is the TALL viewport: it ignores the mobile browser's address bar,
+       so on a real phone this cap was computed against a window ~60-100px
+       larger than the one the sheet actually lives in, and the top of the
+       sheet sat above the visible area. Chrome's device mode does not
+       simulate the collapsing toolbar, which is why it looked correct there
+       and wrong on the actual device.
+
+       vh first as the fallback for anything without dvh; dvh wins where it
+       is supported, matching what .app itself does for the same reason. */
+    max-height: min(
+      62vh,
+      calc(100vh - var(--bar-clear) - var(--tabbar-h) - var(--sp-3))
+    );
+    max-height: min(
+      62dvh,
+      calc(100dvh - var(--bar-clear) - var(--tabbar-h) - var(--sp-3))
+    );
+    /* Belt and braces against a stale --bar-clear: whatever that says, the
+       sheet never claims more than this share of the visible window, so its
+       top edge cannot leave the screen even mid-toolbar-transition. */
+    max-height: min(
+      62dvh,
+      calc(100dvh - var(--bar-clear) - var(--tabbar-h) - var(--sp-3)),
+      calc(100dvh - var(--tabbar-h) - 96px)
+    );
+  }
+
+  .app-slot-left > .pal,
+  .app-slot-right > .ins,
+  .app-slot-bottom > .met {
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    border-bottom: 0;
+  }
+
+  .app-slot-left.is-entering,
+  .app-slot-right.is-entering {
+    animation-name: app-sheet-in;
+  }
+
+  .app-slot-left.is-closing,
+  .app-slot-right.is-closing {
+    animation-name: app-sheet-out;
+  }
+
+  /* --- Chrome that has no place on a phone ------------------------ */
+
+  /* The zoom cluster, the ledger and the panel resizers are desktop
+     affordances. Pinch zooms, the tab bar opens the panels, and a drag
+     handle cannot resize a full-width sheet. Every one of them was a
+     floating box competing with the diagram for the same pixels. */
+  .pr,
+  .cv-zoom,
+  .cv-ledger,
+  .stage-toggle {
+    display: none;
+  }
+}
+
+/* The narrowest common phones (360px) need about 30px more for that word
+   than the row has. The islands' spacing gives it up, so the row stays one
+   row rather than wrapping the menu island under the wordmark. */
+@media (max-width: 379px) {
+  .app-island {
+    gap: var(--sp-1);
+    padding-inline: var(--sp-2);
+  }
+
+  .app-island-menu,
+  .app-history {
+    gap: var(--sp-1);
+  }
+
+  .app-island-menu {
+    padding-left: 0;
+  }
+
+  .app-break-btn {
+    padding: 0 var(--sp-1);
+  }
+}
+
+/* Narrower still, the menu island wraps under the wordmark, and there it
+   starts at the screen edge unless it keeps its own inset. */
+@media (max-width: 339px) {
+  .app-island-menu {
+    padding-left: var(--sp-2);
+  }
+}
+
+/* Only `from` is declared, matching the slide keyframes above: the end state
+   is the slot's natural position, so a sheet left mid-animation by a
+   suspended tab still lands correctly once the animation is dropped. The
+   exits do state `to`, because .is-closing holds its end frame with
+   `forwards` while React unmounts the panel. */
+@keyframes app-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes app-sheet-out {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   The phone tab bar.
+
+   Three edge toggles floating at three canvas corners is a desktop pattern:
+   it works with a mouse, which reaches a corner as cheaply as a centre, and
+   it fails on a phone, where a thumb does not and where each floating button
+   sits ON the diagram. Collected into a bar at the bottom they are where the
+   hand already is, they cover nothing, and the app gains the one structural
+   affordance a phone reader expects to find.
+
+   Rendered at every width and hidden above the breakpoint rather than
+   conditionally mounted: it reflects the same panel state the desktop edge
+   toggles read, and two sources for that would drift.
+   -------------------------------------------------------------------------- */
+
+.app-tabbar {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .app-tabbar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 45;
+    display: flex;
+    align-items: stretch;
+    /* Notched phones: the bar grows by the inset so its buttons sit above
+       the home indicator rather than under it. */
+    height: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: var(--surface);
+    border-top: var(--bw) solid var(--border);
+  }
+
+  .app-tab {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-dim);
+    /* --fs-sm and no tracking. This named --fs-xs, which is not a token, so
+       the labels fell back to 14px with label tracking and shouted. */
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-med);
+    cursor: pointer;
+  }
+
+  .app-tab[aria-expanded='true'] {
+    color: var(--accent-ink);
+    background: var(--accent-soft);
+  }
+
+  /* Tokens, not opacity, as with .btn:disabled: at 0.4 the label fell to
+     1.9:1 and the tab all but vanished. The label stays readable, so the
+     unavailable state needs a cue other than a slightly greyer label: a
+     lighter weight, and the glyph drawn in the outline ink, about half the
+     contrast of an enabled tab's glyph. */
+  .app-tab:disabled,
+  .app-tab[aria-disabled='true'] {
+    color: var(--text-faint);
+    font-weight: var(--fw-body);
+    cursor: default;
+  }
+
+  .app-tab:disabled svg,
+  .app-tab[aria-disabled='true'] svg {
+    color: var(--border-strong);
+  }
+
+  .app-tab svg {
+    flex: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Sheet dismissal: the scrim and the grabber.
+
+   Both exist only at phone widths, where a panel is a sheet sitting OVER the
+   canvas. On a desktop the same panels are rails sitting BESIDE it: there is
+   nothing to dismiss by tapping past, and a scrim over the diagram would be
+   actively wrong.
+   -------------------------------------------------------------------------- */
+
+.app-scrim,
+.app-grabber {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  /* Dims the canvas and catches the tap that closes the sheet. Below the
+     slot (z-index 10) and above everything else on the stage. */
+  .app-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 9;
+    display: block;
+    background: var(--scrim);
+    animation: app-scrim-in var(--dur-base) var(--ease-out);
+  }
+
+  /* Fades with the sheet it belongs to rather than vanishing a frame early,
+     which read as the dimming "snapping off" before the panel had gone. */
+  .app-scrim.is-closing {
+    animation: app-scrim-out var(--dur-base) var(--ease) forwards;
+  }
+
+  /* The grab handle. A 44px target for a 4px mark: the bar is the signal,
+     the padding around it is what a thumb actually lands on. (It was 28px
+     while this comment said 44; box-sizing is border-box here.) */
+  .app-grabber {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    height: 44px;
+    padding: 20px 0;
+    /* The browser must not claim the vertical drag for scrolling, or the
+       sheet never sees the move events it needs to follow the finger. */
+    touch-action: none;
+    cursor: grab;
+  }
+
+  .app-grabber-bar {
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border-strong);
+  }
+
+  .app-grabber:active .app-grabber-bar {
+    background: var(--text-dim);
+  }
+
+  /* The spring back. Applied only when the sheet is NOT being dragged (the
+     inline transform is absent), so the sheet tracks the finger exactly
+     while held and eases home when released. A transition during the drag
+     would make it lag behind the thumb. */
+  .app-slot-left:not([style*='translateY']),
+  .app-slot-right:not([style*='translateY']),
+  .app-slot-bottom:not([style*='translateY']) {
+    transition: transform var(--dur-base) var(--ease-out);
+  }
+
+  /* An entering or closing slot is driven by keyframes; a transition on the
+     same property fights them. */
+  .app-slot.is-entering,
+  .app-slot.is-closing {
+    transition: none;
+  }
+
+  /* The sheet's own surface starts under the grabber, so the handle sits on
+     the panel rather than floating above it. */
+  .app-slot-left > .pal,
+  .app-slot-right > .ins,
+  .app-slot-bottom > .met {
+    border-top: 0;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+
+  .app-slot-left,
+  .app-slot-right,
+  .app-slot-bottom {
+    display: flex;
+    flex-direction: column;
+    border: var(--bw) solid var(--border);
+    border-bottom: 0;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    background: var(--surface);
+    overflow: hidden;
+  }
+}
+
+@keyframes app-scrim-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes app-scrim-out {
+  to {
+    opacity: 0;
+  }
+}

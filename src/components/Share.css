@@ -1,0 +1,277 @@
+/* ==========================================================================
+   Share dialog.
+
+   This file owns .sh-* only. It reuses the tokens from index.css and
+   re-declares none of them. Motion matches the shortcuts dialog, which is
+   the other centred card in the app: same durations, same easing, same
+   pair of entrance and exit keyframes, so two dialogs opened one after the
+   other feel like one app rather than two.
+   ========================================================================== */
+
+.sh-root {
+  position: fixed;
+  inset: 0;
+  /* Same layer as the other dialogs: above the tooltip layer, because a
+     tooltip must never float over the card covering its trigger. */
+  z-index: 500;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-5);
+}
+
+.sh-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+  cursor: default;
+  animation: sh-scrim-in var(--dur-slow) var(--ease-out);
+}
+
+.sh-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  width: min(560px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: var(--sp-5);
+  background: var(--surface);
+  border: var(--bw) solid var(--border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  animation: sh-card-in var(--dur-slow) var(--ease-out);
+}
+
+.sh-card.is-wide {
+  width: min(640px, 100%);
+}
+
+.sh-root.is-closing .sh-card {
+  animation: sh-card-out var(--dur-base) var(--ease) forwards;
+}
+
+.sh-root.is-closing .sh-scrim {
+  animation: sh-scrim-out var(--dur-base) var(--ease) forwards;
+}
+
+/* On a phone the card becomes a bottom sheet, rising from the same edge
+   with the same motion as the panels the tab bar opens. app-sheet-in /
+   app-sheet-out are declared in App.css. */
+@media (max-width: 720px) {
+  .sh-root {
+    place-items: end stretch;
+    padding: 0;
+  }
+
+  .sh-card {
+    width: 100%;
+    max-height: calc(100dvh - var(--sp-7));
+    overflow-y: auto;
+    padding-bottom: calc(var(--sp-5) + env(safe-area-inset-bottom, 0px));
+    border-bottom: 0;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    animation: app-sheet-in var(--dur-base) var(--ease-out);
+  }
+
+  .sh-root.is-closing .sh-card {
+    animation: app-sheet-out var(--dur-base) var(--ease) forwards;
+  }
+}
+
+@keyframes sh-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sh-card-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes sh-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sh-scrim-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.sh-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.sh-title {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.sh-close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+.sh-close:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.sh-options {
+  display: grid;
+  /* Side by side where both fit, stacked on a phone, with no breakpoint
+     to keep in step with the card's width. */
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--sp-3);
+}
+
+.sh-option {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: var(--sp-4);
+  border: var(--bw) solid var(--border);
+  border-radius: var(--r-md);
+}
+
+.sh-option-title {
+  margin: 0;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* The button sits at the foot of its option, so two options with blurbs
+   of different lengths still line their buttons up. */
+.sh-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  margin-top: auto;
+}
+
+.sh-copy[aria-disabled='true'] {
+  cursor: progress;
+}
+
+.sh-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-3);
+}
+
+.sh-foot .sh-note {
+  flex: 1 1 240px;
+}
+
+.sh-url {
+  width: 100%;
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-3);
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  color: var(--text);
+  background: var(--surface-2);
+  border: var(--bw) solid var(--border);
+  border-radius: var(--r-sm);
+}
+
+.sh-url:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.sh-btn {
+  flex: none;
+  padding: var(--sp-2) var(--sp-4);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  background: var(--surface-2);
+  border: var(--bw) solid var(--border);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+.sh-btn:hover {
+  background: var(--surface-3);
+}
+
+.sh-btn-go {
+  color: var(--accent-fg);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.sh-btn-go:hover {
+  background: var(--accent-hover);
+}
+
+.sh-btn-quiet {
+  color: var(--text-dim);
+}
+
+.sh-note {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.sh-note-bad {
+  color: var(--danger);
+}
+
+/* The 44px touch floor the shared .btn takes in index.css. Desktop density
+   is unchanged. */
+@media (pointer: coarse) {
+  .sh-close {
+    width: 44px;
+    height: 44px;
+    /* Grows outward rather than pushing the title down. */
+    margin: calc(var(--sp-2) * -1);
+  }
+
+  .sh-btn {
+    min-height: 44px;
+  }
+}

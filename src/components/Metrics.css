@@ -1,0 +1,695 @@
+/* ==========================================================================
+   Metrics strip — the three live charts below the canvas.
+
+   THE CALM RULE. A healthy system must look calm. Nothing on this strip is
+   coloured until something is actually wrong: the latency trace is neutral
+   grey until p99 crosses a threshold, the dropped-traffic wedge is not
+   painted at all until traffic is genuinely being lost, and the failures
+   panel collapses to a single sentence when there is nothing to report.
+   Colour that is always present carries no information; colour that appears
+   is a signal. That is why the strip is almost entirely greyscale most of
+   the time, and why the moment it is not, the eye goes straight there.
+
+   SERIES ARE SEPARATED BY LIGHTNESS, NOT HUE. p50 / p95 / p99 are one
+   family read as three weights of the same ink, so the chart stays legible
+   in greyscale and to a colourblind student. Measured on --surface, the
+   three series land at 3.27 : 5.28 : 7.06. The palest of them clears the
+   3:1 a graphical mark needs — an earlier draft used --line-2 for p50 and
+   it measured 2.23:1, which is why the series ramp starts at --line-3.
+
+   TEXT INSIDE SVG. Every label lives in the unscaled overlay layer, never
+   in the stretched plot layer, so it can never be smeared horizontally.
+   ========================================================================== */
+
+.mx {
+  display: grid;
+  /* Auto-fitting rather than a fixed count: the strip carries three charts,
+     the request trace and, once a vendor is chosen, the cost. A hardcoded
+     column count would either squeeze five panels into four columns or
+     leave a gap on generic where the cost panel renders nothing. */
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--sp-5);
+  align-items: start;
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+  min-width: 0;
+}
+
+/* Whitespace separates the charts. There is deliberately no dividing rule
+   between them: a 20px gutter already reads as a boundary, and a vertical
+   hairline down a light panel is exactly the border the design rules
+   delete as noise. */
+
+/* --------------------------------------------------------------------------
+   Chart
+   -------------------------------------------------------------------------- */
+
+.mx-chart {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mx-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  /* The plot's own PAD_T supplies the air beneath, so the header only owns
+     the small gap that keeps the caption off the topmost tick label. */
+  margin-bottom: var(--sp-1);
+  min-width: 0;
+}
+
+/* The chart's name. This is the label that tells a student what they are
+   looking at, so it is the LAST thing allowed to truncate — `flex: none`
+   here and a shrinkable readout beside it, rather than the reverse. At a
+   270px column "Throughput" was being ellipsised to "Throu…" while the
+   figure next to it kept every digit, which is exactly backwards. */
+.mx-eyebrow {
+  flex: none;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+/* The readout yields first. It is numeric and tabular, so what it gives up
+   is the gap around it rather than any digit. */
+.mx-head-right {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* The one large readout per chart, with its unit beside it. Baseline
+   alignment, so the unit sits on the numeral's baseline rather than being
+   centred against a 22px box. */
+.mx-readout-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+/* Tabular so a value stepping from 99 to 100 does not shift the header's
+   right edge. */
+.mx-readout {
+  color: var(--text);
+}
+
+.mx-unit {
+  white-space: nowrap;
+}
+
+/* The secondary "Dropped" figure, shown only while traffic is being lost. */
+.mx-dropped {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-1);
+}
+
+.mx-dropped .label {
+  color: var(--text-faint);
+}
+
+/* --------------------------------------------------------------------------
+   Plot box: two stacked layers sharing one coordinate origin
+   -------------------------------------------------------------------------- */
+
+.mx-plot {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.mx-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* The stretched layer is positioned and sized by the component in real
+   pixels, so it must not inherit the inset above. */
+.mx-layer-scaled {
+  inset: auto;
+}
+
+/* --------------------------------------------------------------------------
+   Frame: gridlines, axes, ticks
+
+   The grid recedes almost to invisibility. A ruled field reads as a
+   workspace; a loud one competes with the data drawn on top of it.
+   -------------------------------------------------------------------------- */
+
+.mx-grid {
+  stroke: var(--grid-major);
+  stroke-width: 1;
+}
+
+/* The zero line is the one rule that carries meaning, so it is the only one
+   given weight — it is the floor every trace is measured from. */
+.mx-zero {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.mx-xtick {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+/* "Now" — the right edge traces scroll into. Dashed so it reads as a moving
+   reference rather than as another axis. */
+.mx-now {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+
+/* Axis labels. Set at the label step in mono with tabular figures, so the
+   tick column has a genuine shared right edge rather than one that shifts
+   as the digits change. */
+.mx-ytick {
+  fill: var(--text-faint);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  font-size: var(--fs-label);
+  letter-spacing: 0;
+}
+
+/* `.label` is a text-transform rule for HTML; inside SVG the transform
+   still applies but the colour and size must be restated on `fill`. */
+.mx-xlabel {
+  fill: var(--text-faint);
+  font-family: var(--sans);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-med);
+  letter-spacing: var(--tr-label);
+}
+
+.mx-empty {
+  fill: var(--text-faint);
+  font-family: var(--sans);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-med);
+  letter-spacing: var(--tr-label);
+}
+
+/* --------------------------------------------------------------------------
+   Traces
+
+   vector-effect keeps the stroke a true 1.5px no matter how far the plot
+   layer is stretched horizontally. Without it a 1000-unit viewBox squeezed
+   into 300px renders the "same" stroke at wildly different apparent
+   weights between the three charts.
+   -------------------------------------------------------------------------- */
+
+.mx-line {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Latency: one ink at three weights. p99 is the subject, so it is the
+   darkest and the only one that ever takes a health colour. */
+.mx-line-p50 {
+  stroke: var(--line-3);
+}
+
+.mx-line-p95 {
+  stroke: var(--line-4);
+}
+
+.mx-line-p99 {
+  stroke: var(--text-dim);
+  stroke-width: 2;
+  /* Eases with the readout above it, which .is-warn / .is-danger already
+     ease in index.css. The global reduced-motion rule shortens it. */
+  transition: stroke var(--dur-slow) var(--ease);
+}
+
+.mx-line-p99.is-warn {
+  stroke: var(--warn-mark);
+}
+
+.mx-line-p99.is-danger {
+  stroke: var(--danger-mark);
+}
+
+/* Throughput. Offered is the reference and stays quiet; goodput is the
+   answer to "how much actually got through", so it carries the accent and
+   the heavier stroke. */
+.mx-line-offered {
+  stroke: var(--line-3);
+  stroke-dasharray: 4 3;
+}
+
+.mx-line-goodput {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+/* The gap between offered and goodput IS the dropped traffic, drawn as
+   literal area rather than left for the eye to infer. It is painted only
+   when the engine reports real loss, so a healthy chart has no red haze at
+   all — the two lines simply coincide. */
+.mx-gap {
+  fill: var(--danger-mark);
+  fill-opacity: 0.14;
+  stroke: none;
+}
+
+/* Stacked failure bands. Solid but not heavy: ten of them can be on screen
+   at once, and at full opacity the stack becomes a single dark mass. */
+.mx-band {
+  stroke: none;
+  fill-opacity: 0.85;
+}
+
+/* --------------------------------------------------------------------------
+   Failure reason colours.
+
+   Ten reasons need ten distinguishable bands. Every one of these measures
+   at least 3.27:1 against --surface, so each is a legitimate graphical
+   mark, and the set was chosen by maximising the minimum perceptual
+   (OKLab) distance between any two of them rather than by picking ten
+   colours that merely sounded different. An earlier hand-picked set had
+   `rejected` and `crashed` at 1.01:1 apart — effectively the same colour.
+
+   These are FILLS ONLY. A reason's NAME is always rendered in --text-dim,
+   never in its own hue, because several of these fail 4.5:1 as text.
+   -------------------------------------------------------------------------- */
+
+.mx-fill-error {
+  fill: var(--danger-mark);
+  color: var(--danger-mark);
+}
+
+.mx-fill-shed {
+  fill: var(--warn-mark);
+  color: var(--warn-mark);
+}
+
+.mx-fill-timeout {
+  fill: var(--cat-violet);
+  color: var(--cat-violet);
+}
+
+.mx-fill-no-route {
+  fill: var(--line-3);
+  color: var(--line-3);
+}
+
+.mx-fill-depth {
+  fill: var(--cat-blue);
+  color: var(--cat-blue);
+}
+
+.mx-fill-throttled {
+  fill: var(--kind-autoscaler-stroke);
+  color: var(--kind-autoscaler-stroke);
+}
+
+.mx-fill-rejected {
+  fill: var(--kind-region-stroke);
+  color: var(--kind-region-stroke);
+}
+
+.mx-fill-crashed {
+  fill: var(--line-5);
+  color: var(--line-5);
+}
+
+.mx-fill-partitioned {
+  fill: var(--kind-cdn-stroke);
+  color: var(--kind-cdn-stroke);
+}
+
+.mx-fill-region-down {
+  fill: var(--kind-lb-stroke);
+  color: var(--kind-lb-stroke);
+}
+
+.mx-fill-packet-loss {
+  fill: var(--cat-rust);
+  color: var(--cat-rust);
+}
+
+/* --------------------------------------------------------------------------
+   Legend
+   -------------------------------------------------------------------------- */
+
+.mx-legend {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-4);
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.mx-key {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+/* A line sample, drawn as the series is drawn. 14px is long enough for the
+   dashed offered series to show two dashes and read as dashed. */
+.mx-key-line {
+  flex: none;
+  width: 14px;
+  height: 0;
+  border-top: 2px solid var(--line-3);
+}
+
+.mx-key-p50 {
+  border-top-color: var(--line-3);
+}
+
+.mx-key-p95 {
+  border-top-color: var(--line-4);
+}
+
+.mx-key-p99 {
+  border-top-color: var(--text-dim);
+}
+
+.mx-key-offered {
+  border-top-style: dashed;
+  border-top-color: var(--line-3);
+}
+
+.mx-key-goodput {
+  border-top-color: var(--accent);
+}
+
+/* The dropped key is an area, not a line, so its sample is a filled band
+   rather than a rule — matching how it is actually drawn on the chart. */
+.mx-key-gap {
+  height: 8px;
+  border-top: none;
+  border-radius: var(--r-mark);
+  background: var(--danger-mark);
+  opacity: 0.28;
+}
+
+.mx-key-name {
+  min-width: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mx-key-value {
+  flex: none;
+  color: var(--text);
+  font-weight: var(--fw-num);
+}
+
+/* A legend row for a series that is currently at zero. Dimmed rather than
+   removed, so the row does not appear and disappear under the cursor —
+   but clearly inactive, so it is not mistaken for live data. */
+.mx-key[data-dim] .mx-key-name,
+.mx-key[data-dim] .mx-key-value {
+  color: var(--text-faint);
+  font-weight: var(--fw-body);
+}
+
+.mx-key[data-dim] .mx-key-gap {
+  opacity: 0.16;
+}
+
+/* --------------------------------------------------------------------------
+   Failure legend — a ranked table, one row per active reason
+   -------------------------------------------------------------------------- */
+
+.mx-legend-stack {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: var(--sp-1);
+  /* Five reasons is the realistic ceiling; beyond that the list scrolls
+     rather than pushing the strip taller and stealing canvas height. */
+  max-height: 76px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+/* A grid, so the swatch, name, bar, rate and share columns line up down the
+   list instead of each row laying itself out independently. */
+.mx-key-fail {
+  --swatch: 8px;
+  display: grid;
+  grid-template-columns: var(--swatch) minmax(0, 1fr) 40px auto 38px;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  min-height: 20px;
+}
+
+.mx-key-swatch {
+  width: var(--swatch);
+  height: var(--swatch);
+  border-radius: var(--r-mark);
+  background: currentColor;
+}
+
+/* Share as a length as well as a figure. With up to ten reasons the hues
+   alone cannot be ranked by eye; the bar is the channel that actually
+   sorts them. */
+/* The trough behind a reason's share bar.
+
+   --track measured 1.21:1 against the panel and --border only 1.27:1 —
+   both functionally invisible, so a reason at 1% share rendered a sub-pixel
+   fill inside a trough nobody could see, and read as an empty gap.
+   --border-strong measures 1.58:1, which is the lightest token that
+   actually reads as a container rather than as nothing. A trough is a
+   non-essential decorative bound (the value is printed as text beside it),
+   so it is not held to the 3:1 a meaningful graphic needs. */
+.mx-key-bar {
+  display: block;
+  width: 100%;
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--border-strong);
+  overflow: hidden;
+}
+
+.mx-key-bar-fill {
+  display: block;
+  /* A 1% share still has to read as a mark rather than as a hairline. */
+  min-width: 2px;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: currentColor;
+  /* No width transition: a 10Hz readout wearing one is permanently mid-
+     animation and always behind the number beside it (see .cv-meter-fill). */
+}
+
+.mx-key-fail .mx-key-value {
+  text-align: right;
+}
+
+/* The share reads as context for the rate beside it, so it sits a step
+   quieter and on its own right axis. */
+.mx-key-share {
+  flex: none;
+  text-align: right;
+  color: var(--text-faint);
+  font-weight: var(--fw-body);
+}
+
+/* The healthy case: one calm line, not five rows of zeros. */
+.mx-clean {
+  margin-top: var(--sp-2);
+  /* Matches the height a one-row legend occupies, so the strip does not
+     change height the moment a failure appears or clears.
+
+     MEASURED at 18px, not the 20px this used to claim: the 2px difference
+     made the failures column 233.3px tall against its two siblings' 231.3px,
+     so the three panel bottoms did not line up and neither did their footer
+     baselines. */
+  min-height: 18px;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-faint);
+}
+
+/* --------------------------------------------------------------------------
+   Responsive.
+
+   CONTAINER queries against .app-stage, not media queries: .mx lives
+   inside the stage, which is the viewport minus both rails, so a viewport
+   query cannot see the width the charts actually get.
+
+     1280 window -> 1280 - 200 - 288 =  792px stage -> must reflow
+     1512 window -> 1512 - 224 - 320 =  968px stage -> must NOT reflow
+
+   Except a 1512-PHYSICAL window is a 1436 CSS viewport once the OS window
+   frame is taken out, which makes the stage 892px — under the old 900px
+   threshold, so the reflow fired at exactly the size it was written to
+   avoid, and the strip grew to two rows and ate the canvas.
+
+   The threshold is therefore set from the measured stage width, not from
+   the nominal window width: 892 must NOT reflow, 792 must. 840px sits
+   between them with ~50px of clearance either side.
+   -------------------------------------------------------------------------- */
+
+@container stage (max-width: 840px) {
+  .mx {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Failures go full width on the second row, where the ranked list has
+     room to be read rather than being crushed into a third of the strip. */
+  .mx-fail-col {
+    grid-column: 1 / -1;
+  }
+}
+
+@container stage (max-width: 560px) {
+  .mx {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-4);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   By traffic source
+
+   Up to four routes on one axis, separated by weight and dash on the same
+   neutral ramp as the latency lines. A route the app calls hurting takes
+   the danger mark and keeps its dash, so its legend key still matches it.
+   -------------------------------------------------------------------------- */
+
+.mx-route-0 {
+  stroke: var(--text-dim);
+  stroke-width: 2;
+}
+
+.mx-route-1 {
+  stroke: var(--line-4);
+  stroke-dasharray: 5 3;
+}
+
+.mx-route-2 {
+  stroke: var(--line-3);
+  stroke-dasharray: 1.5 3;
+}
+
+.mx-route-3 {
+  stroke: var(--line-5);
+  stroke-dasharray: 8 3;
+}
+
+.mx-line.is-danger {
+  stroke: var(--danger-mark);
+}
+
+.mx-key-route-0 {
+  border-top-color: var(--text-dim);
+}
+
+.mx-key-route-1 {
+  border-top-style: dashed;
+  border-top-color: var(--line-4);
+}
+
+.mx-key-route-2 {
+  border-top-style: dotted;
+  border-top-color: var(--line-3);
+}
+
+.mx-key-route-3 {
+  border-top-style: dashed;
+  border-top-color: var(--line-5);
+}
+
+.mx-key-line.is-danger {
+  border-top-color: var(--danger-mark);
+}
+
+/* One row per route, so long client names truncate in a column of their
+   own instead of wrapping the legend into a ragged block. */
+.mx-legend-routes {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: var(--sp-1);
+}
+
+.mx-key-route {
+  width: 100%;
+}
+
+.mx-key-route .mx-key-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mx-key-value.is-danger {
+  color: var(--danger);
+}
+
+/* The Failing / p99 switch. Smaller than a toolbar button because it sits
+   in a chart header, but still a 24px target. */
+.mx-seg {
+  display: inline-flex;
+  flex: none;
+  border: var(--bw) solid var(--border-strong);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+
+.mx-seg-btn {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 var(--sp-2);
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: var(--fs-label);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+
+.mx-seg-btn + .mx-seg-btn {
+  border-left: var(--bw) solid var(--border-strong);
+}
+
+.mx-seg-btn:hover {
+  color: var(--text);
+}
+
+.mx-seg-btn[aria-pressed='true'] {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mx-seg-btn {
+    transition: none;
+  }
+}
+
+/* The n/a sentinel in a chart header, before anything has been measured.
+   Dimmed so it reads as an absence rather than a value. */
+.mx-readout.is-unmeasured {
+  color: var(--text-dim);
+}

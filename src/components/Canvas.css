@@ -1,0 +1,2258 @@
+/* ==========================================================================
+   Canvas — topology editor
+
+   The canvas is the instrument. It is the only region of the app permitted to
+   be loud; every panel around it recedes to a hairline. The ground is --bg,
+   the node body sits one step above it on --surface-2, and its title block one
+   step above that on --surface-3. Structure comes from that stepping and from
+   the header/body split — never from nesting, shadows or tint.
+
+   Color budget: neutral at rest. --ok/--warn/--danger appear on exactly three
+   carriers, all of them live measurements — the meter fill, the health rule
+   and dot, and a primary value that has crossed a threshold. A healthy
+   topology renders entirely in greys, which is what gives a red meter meaning.
+
+   All font sizes come from the six-step scale in index.css. This file defines
+   no size of its own.
+   ========================================================================== */
+
+.cv-host {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  /* Dragging a node must never start a native text selection. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* --------------------------------------------------------------------------
+   Interaction surface.
+
+   The host is a positioning root and nothing else. This element owns every
+   pointer handler, and the overlay chrome (zoom controls, ledger, hint) are
+   its SIBLINGS, not its children. A press on a button therefore never enters
+   the pan/select router at all, which is the structural reason those buttons
+   work: the router used to sit on the host and capture the pointer before it
+   knew what had been pressed, which suppressed the button's click entirely.
+   -------------------------------------------------------------------------- */
+
+.cv-surface {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+.cv-surface[data-cursor='grab'] {
+  cursor: grab;
+}
+
+.cv-surface[data-cursor='grabbing'] {
+  cursor: grabbing;
+}
+
+.cv-surface[data-cursor='crosshair'] {
+  cursor: crosshair;
+}
+
+/* Drop target feedback: an inset hairline, not a glow or a tint. */
+.cv-host.is-dropping::after {
+  content: '';
+  position: absolute;
+  inset: var(--sp-2);
+  border: 1px dashed var(--accent);
+  border-radius: var(--r-md);
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   Ruled grid.
+
+   Four repeating-linear-gradients: minor verticals, minor horizontals, then
+   the same again at 4x spacing in a lighter value. Painted as a CSS
+   background so panning and zooming it costs nothing — background-size and
+   -position are driven from JS to track the viewport exactly.
+
+   Replaces an 8px dot field, which at a 1900px canvas meant ~55,000 dots of
+   static competing with the diagram for attention.
+   -------------------------------------------------------------------------- */
+
+.cv-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to right, var(--grid-major) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-major) 1px, transparent 1px);
+  background-repeat: repeat;
+  pointer-events: none;
+  transition: opacity var(--dur-slow) var(--ease);
+}
+
+.cv-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+/* --------------------------------------------------------------------------
+   Edges
+   -------------------------------------------------------------------------- */
+
+.cv-edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  cursor: pointer;
+}
+
+/* The painted layers of an edge are decoration ONLY. `.cv-edge-hit` above is
+   the sole hit target, and it is a SIBLING of these paths rather than their
+   ancestor — so if the visible line were hit-testable it would sit on top of
+   the fat invisible one, and `closest('[data-hit]')` from the pointer's
+   target would walk up past the whole edge group and find nothing. That is
+   exactly how clicking an edge silently did nothing. */
+.cv-edge-line,
+.cv-edge-arrow,
+.cv-edge-flow,
+.cv-edge-label {
+  pointer-events: none;
+}
+
+.cv-edge-line {
+  fill: none;
+  stroke: var(--line);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* The opacity eases with the colour: the danger state changes both, and
+     easing one while the other snapped still read as a jump. */
+  transition:
+    stroke var(--dur-fast) var(--ease),
+    stroke-opacity var(--dur-fast) var(--ease);
+}
+
+.cv-edge-arrow {
+  fill: var(--line);
+  transition:
+    fill var(--dur-fast) var(--ease),
+    fill-opacity var(--dur-fast) var(--ease);
+}
+
+.cv-edge.is-active .cv-edge-line {
+  stroke: var(--line-2);
+}
+
+.cv-edge.is-active .cv-edge-arrow {
+  fill: var(--line-2);
+}
+
+.cv-edge:hover .cv-edge-line {
+  stroke: var(--line-3);
+}
+
+.cv-edge:hover .cv-edge-arrow {
+  fill: var(--line-3);
+}
+
+/* A wire feeding a node that is losing traffic carries that state upstream to
+   its cause. This is metric state, not decoration. */
+.cv-edge.is-danger .cv-edge-line {
+  stroke: var(--danger);
+  stroke-opacity: 0.55;
+}
+
+.cv-edge.is-danger .cv-edge-arrow {
+  fill: var(--danger);
+  fill-opacity: 0.75;
+}
+
+.cv-edge.is-danger .cv-edge-flow {
+  stroke: var(--danger);
+  stroke-opacity: 0.5;
+}
+
+.cv-edge.is-selected .cv-edge-line {
+  stroke: var(--accent);
+  stroke-opacity: 1;
+}
+
+.cv-edge.is-selected .cv-edge-arrow {
+  fill: var(--accent);
+  fill-opacity: 1;
+}
+
+.cv-edge.is-selected .cv-edge-flow {
+  stroke: var(--text);
+  stroke-opacity: 0.8;
+}
+
+/* The moving pulses. One cycle is 12 user units, so the animation-duration set
+   inline directly encodes the flow rate — no per-frame React work, and the
+   whole thing runs off the main thread.
+
+   Sparse dashes (2 on, 10 off) read as discrete packets moving down a wire.
+   The old 8/4 read as marching ants, i.e. as a selection marquee. The flow
+   layer rides OVER the solid base at 75% width, so the base line is always
+   continuous and the pulse is a highlight, never a hole punched in the wire. */
+.cv-edge-flow {
+  fill: none;
+  stroke: var(--text-dim);
+  stroke-opacity: 0.55;
+  stroke-linecap: round;
+  stroke-dasharray: 2 10;
+  animation: cv-flow 1s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes cv-flow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+/* Rate at the midpoint. This is how a student sees traffic SPLIT at a load
+   balancer — previously invisible. The halo is paint-order stroke, so the
+   label stays readable where it crosses the grid or another wire. */
+.cv-edge-label {
+  fill: var(--text-faint);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-num);
+  letter-spacing: var(--tr-num);
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.cv-edge.is-active:hover .cv-edge-label {
+  fill: var(--text-dim);
+}
+
+/* Delete affordance on a selected edge. Explicitly re-enabled: it carries its
+   own data-hit and must be pressable. */
+.cv-edge-del {
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.cv-edge-del rect {
+  fill: var(--surface-2);
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+/* The invisible hit pad under the visible 18x18 button, same pattern as the
+   port discs: `fill: transparent` (never `none`) so it takes pointer events
+   while painting nothing. Scoped harder than `.cv-edge-del rect` above so it
+   wins outright rather than by source order. */
+.cv-edge-del rect.cv-edge-del-hit {
+  fill: transparent;
+  stroke: none;
+}
+
+.cv-edge-del path {
+  stroke: var(--text-dim);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  fill: none;
+  transition: stroke var(--dur-fast) var(--ease);
+}
+
+.cv-edge-del:hover rect {
+  stroke: var(--danger);
+}
+
+.cv-edge-del:hover path {
+  stroke: var(--danger);
+}
+
+.cv-link-preview {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+  pointer-events: none;
+}
+
+/* The preview has locked onto a legal target: solid, because the dashes mean
+   "not yet attached" and it now is, pending only the release. */
+.cv-link-preview.is-snapped {
+  stroke-dasharray: none;
+  stroke-width: 2;
+}
+
+/* Marquee box-select. A hairline rect with a faint wash, drawn in world
+   space so it tracks the content rather than the screen. */
+.cv-marquee {
+  fill: var(--accent);
+  fill-opacity: 0.08;
+  stroke: var(--accent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+/* "Find the problem" points here. A solid ring in the danger mark plus a
+   word, so the answer never rests on colour alone. Inert: it sits above the
+   nodes but every press goes through to the node under it. */
+.cv-spotlight {
+  pointer-events: none;
+}
+
+.cv-spotlight-ring {
+  fill: none;
+  stroke: var(--danger-mark);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.cv-spotlight-tag {
+  fill: var(--danger-soft);
+  stroke: var(--danger-mark);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.cv-spotlight-label {
+  fill: var(--danger);
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+/* --------------------------------------------------------------------------
+   Nodes
+
+   A node reads as a schematic component drawn in ITS OWN COLOUR. A student
+   should be able to pick the database out of a diagram from across the room
+   without reading a single word, and should carry that association between
+   diagrams: amber is always cache, blue is always database.
+
+   PER-KIND COLOUR PLUMBING.
+
+   The kind -> colour mapping lives in index.css, which sets --k-fill,
+   --k-line, --k-stroke and --k-ink on any element carrying [data-kind].
+   NodeView sets that attribute, so every rule below is written against the
+   locals and is completely kind-agnostic — one rule covers all 33 kinds.
+   Each var() keeps a neutral fallback so an unmapped kind renders as a
+   plain grey node rather than as a transparent hole.
+   -------------------------------------------------------------------------- */
+
+/* No --k-* declarations here on purpose.
+   [data-kind='cache'] and .cv-node have the SAME specificity (0-1-0), so
+   declaring the neutral fallback on this class did not lose to the kind rule,
+   it BEAT it: Canvas.css is imported after index.css and source order breaks
+   the tie. Every node on the canvas rendered the same grey while the palette
+   rows, which carry data-kind without this class, coloured correctly.
+   The fallback now lives in each var() below, which applies only when the
+   token is genuinely unset. */
+.cv-node {
+  cursor: grab;
+}
+
+/* A node dropped from the palette fades in where it landed. Opacity only,
+   very deliberately: the group's position is the `transform` ATTRIBUTE
+   (translate(x,y)), and a CSS transform in a keyframe would override that
+   attribute and teleport the node to the origin for the animation's
+   duration. NodeView applies this class only to a node that just arrived
+   alone; preset loads and restores render with no entrance. */
+.cv-node.is-entering {
+  animation: cv-node-in var(--dur-base) var(--ease-out);
+}
+
+@keyframes cv-node-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.cv-node:active {
+  cursor: grabbing;
+}
+
+/* The body carries the kind identity: its own tint inside, its own colour on
+   the outline at 1.5px. Measured: --text on every one of the 14 fills is
+   13.69-13.94, and every fill's stroke is 3.49-3.95 on --bg (AA graphical). */
+.cv-node-body {
+  fill: var(--k-fill, var(--surface-2));
+  stroke: var(--k-stroke, var(--border-strong));
+  stroke-width: var(--bw-strong);
+  transition:
+    stroke var(--dur-fast) var(--ease),
+    fill var(--dur-fast) var(--ease);
+}
+
+/* The hairline under the header is drawn in the kind's own stroke, held well
+   back with opacity. A neutral --border line across a tinted body reads as a
+   foreign object sitting on top of the colour; the same hue at low alpha
+   reads as part of the component. */
+.cv-node-hair {
+  stroke: var(--k-stroke);
+  stroke-opacity: 0.28;
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+/* HEALTH vs IDENTITY — the rule that stops the two colour systems fighting.
+
+   The node's border is IDENTITY (what this component is: permanent, learned).
+   Health is STATE (what is happening right now: transient, urgent) and is
+   therefore drawn INSIDE the node, on the meter, using the -mark tokens.
+
+   Consequently the top rule is NOT a health channel any more. It was a third
+   redundant copy of the same signal, and in colour it competed with the kind
+   stroke it sat directly against — two saturated hues meeting at a corner,
+   which is exactly the fight the brief warns about. It is now a quiet seat
+   for the kind's own colour, and health lives in one obvious place. */
+/* Hover deepens the node's OWN colour rather than swapping in a neutral. A
+   grey hover on a coloured node reads as the colour being taken away. */
+.cv-node:hover .cv-node-body {
+  stroke-width: 2;
+}
+
+/* SELECTION.
+
+   Accent, 2px, on a 3px offset ring OUTSIDE the body, plus a lift. It must
+   read as unmistakably selected against all fourteen fills, including the
+   palest: --accent measures 5.42:1 against the lightest kind fill, so the
+   ring is never ambiguous. The body keeps its own kind stroke underneath —
+   selection frames the component, it does not repaint it. */
+.cv-node:focus {
+  outline: none;
+}
+
+.cv-node-ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  pointer-events: none;
+  /* The ring element mounts on selection, so this plays exactly when the
+     selection appears: a short settle inward onto the node, which reads as
+     the ring closing around the thing that was picked. transform-box makes
+     the scale run about the ring's own centre rather than the SVG origin;
+     the rect carries no transform attribute of its own, so the CSS
+     transform collides with nothing. */
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cv-ring-in var(--dur-fast) var(--ease-out);
+}
+
+@keyframes cv-ring-in {
+  from {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+}
+
+/* Keyboard focus gets the same ring treatment as mouse selection, so tabbing
+   through the canvas is never a second-class way to see where you are. */
+.cv-node:focus-visible .cv-node-body {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.cv-node-icon {
+  color: var(--k-ink, var(--text-dim));
+}
+
+/* The icon group's primitives, not the group: vector-effect is a
+   presentation attribute on graphics elements and does not inherit. */
+.cv-glyph > * {
+  vector-effect: non-scaling-stroke;
+}
+
+/* T3 — the node name. */
+.cv-node-name {
+  fill: var(--text);
+  font-family: var(--sans);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-body);
+  /* `central`, not `middle`. `middle` centres on the x-height, which put the
+     name's box centre at 13.63 against a header line of 15 — the name sat
+     low against a glyph centred on the grid. `central` centres on the em
+     box, which is the same geometric reference the icon grid uses, so the
+     two land on one line. */
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
+/* T4 — the primary metric. Promotes to T5 when the node is selected. */
+.cv-node-primary {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  font-size: var(--fs-num);
+  font-weight: var(--fw-num);
+  letter-spacing: var(--tr-num);
+  dominant-baseline: alphabetic;
+  pointer-events: none;
+}
+
+.cv-node.is-selected .cv-node-primary {
+  font-size: var(--fs-lg);
+  letter-spacing: var(--tr-lg);
+}
+
+/* Strip kinds (shard, replica, streambroker) never take the selected font
+   bump: their strip's top edge at y=56 sits 4px under the primary's baseline
+   at 52, and a 22px descender crosses it (measured overlap 124x3px on a
+   selected shard). The base size is the only one that clears the strip. */
+.cv-node.has-strip.is-selected .cv-node-primary {
+  font-size: var(--fs-num);
+  letter-spacing: var(--tr-num);
+}
+
+/* T2 — the two secondary metrics. */
+.cv-node-sec {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-body);
+  letter-spacing: var(--tr-num);
+  dominant-baseline: alphabetic;
+  pointer-events: none;
+}
+
+.cv-node-primary .cv-val {
+  fill: var(--text);
+  /* The primary value takes the health colour when its own metric breaches
+     (the is-warn / is-danger rules further down). Easing the fill makes the
+     state CHANGE legible as a change rather than a flicker, and it costs
+     nothing at 10Hz: the digits repaint every tick, but fill only moves at
+     the moment a threshold is crossed. */
+  transition: fill var(--dur-slow) var(--ease);
+}
+
+.cv-node-sec .cv-val {
+  fill: var(--text-dim);
+}
+
+/* Status mark, top right. Redundant with colour by SHAPE — ring at warn,
+   disc at danger, square at fault — so the states are told apart before any
+   colour is applied. These are marks, not text, so they take the -mark
+   tokens. They had no rule at all before this change and were painting SVG
+   default black on every warning node. */
+.cv-node-mark.is-warn {
+  fill: none;
+  stroke: var(--warn-mark);
+  stroke-width: 2;
+}
+
+.cv-node-mark.is-danger {
+  fill: var(--danger-mark);
+}
+
+.cv-node-mark.is-fault {
+  fill: var(--danger-mark);
+}
+
+/* The mark fades in whenever it mounts, so it does not pop. That is mostly
+   a health change, and health is settled first (settledHealth.ts), so a
+   value sitting on a threshold does not keep replaying it. Zooming across
+   a detail level or loading a design remounts it too. */
+.cv-node-mark {
+  animation: cv-mark-in var(--dur-fast) var(--ease-out);
+}
+
+@keyframes cv-mark-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* T1 — unit captions. Uppercase is what makes 11px read as a label.
+
+   Drawn in the kind's ink rather than --text-faint. On a tinted body the
+   neutral faint grey is the one token that goes muddy: it is the lowest-
+   contrast text in the system landing on a surface it was not measured
+   against. --k-ink is measured at 6.91-7.40 on its own fill, all fourteen. */
+.cv-cap {
+  fill: var(--k-ink, var(--text-dim));
+  font-family: var(--sans);
+  font-size: var(--fs-label);
+  font-weight: var(--fw-num);
+  text-transform: uppercase;
+  letter-spacing: var(--tr-label);
+}
+
+/* The primary value takes the health color only at warn and danger, and only
+   because it IS the breaching metric. At ok nothing is colored — which is the
+   entire reason a colored number means something when one appears.
+
+   Note this deliberately does not tint the secondaries: reddening a p99
+   because utilization breached gives that number a state it did not earn. */
+.cv-node.is-warn .cv-node-primary .cv-val {
+  fill: var(--warn);
+}
+
+.cv-node.is-danger .cv-node-primary .cv-val {
+  fill: var(--danger);
+}
+
+/* --------------------------------------------------------------------------
+   Sparkline — 60 samples at 1Hz, matching the 60s window of the charts.
+   No fill, no dots, no axis: a trend, not a chart.
+   -------------------------------------------------------------------------- */
+
+/* Drawn in the node's own ink, so the trace belongs to the component instead
+   of being a neutral grey line laid across it. */
+.cv-spark {
+  fill: none;
+  stroke: var(--k-ink, var(--text-dim));
+  stroke-opacity: 0.75;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  transition: stroke-opacity var(--dur-fast) var(--ease);
+}
+
+.cv-node:hover .cv-spark,
+.cv-node.is-selected .cv-spark {
+  stroke-opacity: 1;
+}
+
+.cv-spark-base {
+  stroke: var(--k-stroke);
+  stroke-opacity: 0.25;
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+/* --------------------------------------------------------------------------
+   Meter — position-encoded load. The primary health channel, and the one that
+   survives colorblindness because it encodes by length.
+   -------------------------------------------------------------------------- */
+
+/* The meter is where HEALTH lives, and the only place it lives. Because it
+   sits inside the node, on the node's own tint, the -mark tokens are used
+   rather than the text tokens: these are fills, not type, and they are the
+   brighter, more saturated half of the split. Measured >= 3:1 on --bg and on
+   every kind fill.
+
+   The trough is the kind's colour at very low alpha rather than the neutral
+   --track. A grey trough on a tinted body is a visible grey rectangle; the
+   node's own hue at 12% just reads as a recess. */
+.cv-meter-track {
+  fill: var(--k-stroke);
+  fill-opacity: 0.12;
+}
+
+/* At 'ok' the bar is the node's OWN colour: a healthy component is simply
+   itself, working. Load is already encoded by LENGTH, which is the channel
+   that survives colourblindness and low zoom, so hue is held in reserve for
+   the two states actually worth interrupting a student for.
+
+   The FILL colour eases (it moves only at threshold crossings, like the
+   primary value's colour), but the WIDTH deliberately does not: it is a
+   10Hz measurement, and a width transition kept every meter permanently
+   animating under load — document.getAnimations() reported 30 width
+   transitions in "running" simultaneously on a 36-node preset, each bar
+   lagging truth by up to 200ms forever. The digits step; the bar steps
+   with them. */
+.cv-meter-fill {
+  fill: var(--k-stroke);
+  transition: fill var(--dur-slow) var(--ease);
+}
+
+.cv-node.is-warn .cv-meter-fill {
+  fill: var(--warn-mark);
+}
+
+.cv-node.is-danger .cv-meter-fill {
+  fill: var(--danger-mark);
+}
+
+/* The warn threshold tick, drawn in the kind's ink so it stays legible over
+   both the empty trough and the filled bar as the bar grows past it. */
+.cv-meter-tick {
+  fill: var(--k-ink, var(--text-dim));
+  fill-opacity: 0.45;
+}
+
+/* --------------------------------------------------------------------------
+   Ports
+   -------------------------------------------------------------------------- */
+
+/* The real target. Three times the visual radius, invisible, and drawn
+   beneath the dot so the dot still paints at its true size. Always hit-
+   testable — a port you must first hover to aim at is a port you cannot
+   aim at. */
+.cv-port-hit {
+  fill: transparent;
+  stroke: none;
+}
+
+/* A white centre with the kind's own ring: the port reads as belonging to
+   this component, and stays visible against the tinted body. */
+.cv-port {
+  fill: var(--surface);
+  stroke: var(--k-stroke);
+  stroke-width: 1.5;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--dur-fast) var(--ease),
+    stroke var(--dur-fast) var(--ease),
+    fill var(--dur-fast) var(--ease);
+}
+
+/* Ports are an editing affordance, so they appear on approach rather than
+   sitting on every node permanently. They stay visible while a link is being
+   drawn, otherwise there would be nothing to aim at. */
+.cv-node:hover .cv-port,
+.cv-node:focus-visible .cv-port,
+.cv-node.is-selected .cv-port,
+.cv-node.is-linking .cv-port {
+  opacity: 1;
+}
+
+.cv-port-hit {
+  cursor: crosshair;
+}
+
+/* Aiming at a port is a "you are about to act" moment, so it takes accent —
+   one of the four permitted accent uses. */
+.cv-port-hit:hover + .cv-port {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+
+/* --------------------------------------------------------------------------
+   Link states.
+
+   While a link is in flight the canvas answers one question for every node:
+   can this receive the wire? These states must out-shout the kind colour for
+   as long as the gesture lasts, because during a drag the question "where can
+   this go" completely displaces "what is this" — so they are the one place a
+   node's identity stroke is legitimately overridden.
+   -------------------------------------------------------------------------- */
+
+/* The node the wire is coming FROM: accent, dashed, so it reads as active and
+   in-flight rather than merely selected. */
+.cv-node.is-link-source .cv-node-body {
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}
+
+/* An illegal target recedes. Deliberately NOT red: nothing has gone wrong,
+   this node simply is not available, and spending the danger colour on a
+   non-error teaches a student to ignore it. */
+.cv-node.is-link-invalid {
+  opacity: 0.4;
+}
+
+/* A legal target is affirmed in green — the only place --ok-mark appears as
+   an outline, and it means "you may drop here". */
+.cv-node.is-link-valid .cv-node-body {
+  stroke: var(--ok-mark);
+  stroke-width: 2;
+}
+
+/* The one node the release will actually connect to: same green, thicker,
+   plus its input port lit, so the commit point is never in doubt. */
+.cv-node.is-link-target .cv-node-body {
+  stroke: var(--ok-mark);
+  stroke-width: 3;
+}
+
+.cv-node.is-link-target .cv-port-in {
+  opacity: 1;
+  fill: var(--ok-mark);
+  stroke: var(--ok-mark);
+}
+
+/* --------------------------------------------------------------------------
+   Faulted — an injected failure is in force on this node right now.
+
+   This is the one state that overrides identity while the canvas is at rest,
+   and it should: a crashed node's colour is no longer the useful fact about
+   it. Outline in --danger-mark and dash it, so a fault is distinguishable
+   from a merely overloaded node (solid outline, red meter) at a glance.
+   -------------------------------------------------------------------------- */
+
+.cv-node.is-faulted .cv-node-body {
+  stroke: var(--danger-mark);
+  stroke-width: 2;
+  stroke-dasharray: 5 3;
+}
+
+.cv-node.is-faulted .cv-meter-fill {
+  fill: var(--danger-mark);
+}
+
+/* --------------------------------------------------------------------------
+   STRUCTURE — what a node is made of
+
+   Everything in this block is INERT. The node group already carries the
+   `data-hit="node"` the pointer router reads, and the ports carry their own
+   15px hit discs. If a stack card or a shard cell could take a pointer it
+   would sit above those discs near the node's edges and eat link gestures, so
+   every element here is pointer-events:none without exception. This is the
+   same rule the meter and sparkline already follow.
+   -------------------------------------------------------------------------- */
+
+.cv-units,
+.cv-unit,
+.cv-strip,
+.cv-cell,
+.cv-cell-fill,
+.cv-vessel,
+.cv-vessel-track,
+.cv-vessel-fill,
+.cv-vessel-brim {
+  pointer-events: none;
+}
+
+/* A card in the fleet behind the node body.
+
+   Same fill and outline as the body, so the stack reads as more of THE SAME
+   COMPONENT rather than as a shadow or a decorative offset. That is the whole
+   requirement: "several machines", not "one machine with a drop shadow". The
+   kind colour carries through, so a stack of databases is still blue. */
+.cv-unit {
+  fill: var(--k-fill);
+  stroke: var(--k-stroke);
+  stroke-width: var(--bw);
+  stroke-opacity: 0.55;
+  transition:
+    x var(--dur-fast) var(--ease-out),
+    y var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
+}
+
+/* A unit that has been DECIDED but is not serving yet.
+
+   The warm-up gap is the single most important thing the autoscaler teaches:
+   the controller already acted, and requests are still failing, because the
+   machines are not up. So a booting unit is drawn as an outline with no fill
+   — visibly a placeholder for a machine rather than a machine — and it is the
+   only dashed shape in the node vocabulary. When it lands it gains its fill
+   and slides forward in the stack, which is exactly the moment the queue
+   behind it starts to drain. */
+.cv-unit.is-pending {
+  fill: none;
+  stroke-dasharray: 3 3;
+  stroke-opacity: 0.75;
+}
+
+/* The unit count. Tabular so the digits do not jitter as a fleet scales, and
+   held in the kind's own ink so it belongs to the component. */
+.cv-node-badge {
+  /* Centred on HEAD_CENTER_Y, the same line the glyph, name and status mark
+     use — see the header geometry block in Canvas.tsx. `central` for the
+     same reason .cv-node-name uses it. */
+  dominant-baseline: central;
+  pointer-events: none;
+  fill: var(--k-ink, var(--text-dim));
+  /* A plate behind the glyphs, painted first (paint-order), so the count
+     stays legible where the offset instance-stack card edges pass behind
+     the top-right corner. This was the only text in the app sitting on a
+     non-uniform background. */
+  paint-order: stroke;
+  stroke: var(--k-fill);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  font-size: var(--fs-label);
+  font-weight: var(--fw-num);
+  letter-spacing: var(--tr-num);
+}
+
+/* While units are booting the badge says so in the warning colour, because
+   "5x" and "5x+3" are different facts about the system and the second one is
+   temporary. */
+.cv-node-badge.is-warming {
+  fill: var(--warn);
+}
+
+/* --- per-unit strip: shards and replica sets ---------------------------- */
+
+/* The empty cell. A trough, matching the meter's, so an idle partition reads
+   as an empty container rather than as a missing one. */
+.cv-cell {
+  fill: var(--track);
+}
+
+/* The fill is the partition's own load, growing from the bottom.
+
+   Default is the kind's own stroke colour: at a glance the strip is a bar
+   chart in the component's colour. Health only OVERRIDES it once a cell is
+   actually in trouble, so a healthy strip is calm and a hot cell is the only
+   loud thing in the node.
+
+   --k-stroke rather than the --kind-*-line tokens: only fill/stroke/ink are
+   mapped to locals on .cv-node, so --k-line does not resolve and the cells
+   would paint as nothing. Using the mapped local keeps every kind — including
+   ones added after this was written — correct without a fourth declaration in
+   each of the per-kind blocks. */
+.cv-cell-fill {
+  fill: var(--k-stroke);
+}
+
+.cv-cell-fill.is-warn {
+  fill: var(--warn-mark);
+}
+
+.cv-cell-fill.is-danger {
+  fill: var(--danger-mark);
+}
+
+/* The replica PRIMARY. Index 0 of a replica set is a different kind of thing
+   from the rest — it takes the writes — so it is separated by a rule down its
+   right edge rather than by a colour, which would collide with the health
+   channel the fills already use. */
+.cv-cell.is-lead {
+  stroke: var(--k-stroke);
+  stroke-opacity: 0.5;
+  stroke-width: var(--bw);
+}
+
+/* The replica primary's saturation-proof marker: a notch UNDER the lead
+   cell, outside the fill's colour channel, so the write/read distinction
+   survives every member of the set being pinned red. */
+.cv-cell-lead-notch {
+  fill: var(--k-ink, var(--text-dim));
+}
+
+/* --- queue vessel ------------------------------------------------------- */
+
+.cv-vessel-track {
+  fill: var(--track);
+  stroke: var(--k-stroke);
+  stroke-opacity: 0.3;
+  stroke-width: var(--bw);
+}
+
+.cv-vessel-fill {
+  /* See .cv-cell-fill: --k-line is not a mapped local. No width transition:
+     the depth is a 10Hz measurement, and transitioning it kept the vessel
+     permanently animating under load (see .cv-meter-fill). */
+  fill: var(--k-stroke);
+}
+
+/* The limit. A queue's brim is a hard wall — past it requests are destroyed,
+   not delayed — so it is drawn as a solid stop rather than a tick. */
+.cv-vessel-brim {
+  fill: var(--k-stroke);
+  fill-opacity: 0.65;
+}
+
+/* AT THE LIMIT the vessel is not full, it is OVERFLOWING: it is turning
+   traffic away. Full-strength danger on both the fill and the wall, because
+   this is the moment the component stops working and starts dropping
+   requests. */
+.cv-vessel.is-shedding .cv-vessel-fill {
+  fill: var(--danger-mark);
+}
+
+.cv-vessel.is-shedding .cv-vessel-brim {
+  fill: var(--danger);
+  fill-opacity: 1;
+}
+
+/* --------------------------------------------------------------------------
+   EDGE STATE — whether a wire can carry traffic at all
+
+   `edgeFlow` cannot answer this and must not be asked to. An edge at 0 rps
+   because a breaker in front of it is OPEN and an edge at 0 rps because
+   nobody is calling look identical as numbers and mean opposite things. These
+   rules are keyed off the engine's own `edgeState`, which is a structural
+   assertion rather than an inference from a rate.
+   -------------------------------------------------------------------------- */
+
+/* CUT and BLOCKED: the wire is severed. Held back hard and given a dash
+   pattern so it reads as a broken connection even in a greyscale screenshot,
+   with the break mark below doing the decisive work. */
+.cv-edge.is-state-cut .cv-edge-line,
+.cv-edge.is-state-blocked .cv-edge-line {
+  stroke: var(--line);
+  stroke-opacity: 0.45;
+  stroke-dasharray: 5 5;
+}
+
+.cv-edge.is-state-cut .cv-edge-arrow,
+.cv-edge.is-state-blocked .cv-edge-arrow {
+  fill: var(--line);
+  fill-opacity: 0.4;
+}
+
+/* The break itself. The gap rect paints the page ground over the wire so the
+   line genuinely stops, and the two chevrons are the cut ends springing
+   apart. A severed wire must not be merely faint — it must be visibly
+   missing a piece. */
+.cv-edge-break {
+  pointer-events: none;
+}
+
+.cv-edge-break-gap {
+  fill: var(--bg);
+}
+
+.cv-edge-break-mark {
+  fill: none;
+  stroke: var(--danger);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* A blocked wire is a component DOING ITS JOB — a breaker protecting a
+   failing downstream — so its break is drawn in the neutral line colour
+   rather than in danger. Only an injected cut is a fault. */
+.cv-edge.is-state-blocked .cv-edge-break-mark {
+  stroke: var(--line-3);
+}
+
+/* STANDBY: a region's non-active edge. Wired, healthy, deliberately unused.
+   This must NOT look like a dead link, so it keeps a continuous stroke and is
+   simply held back — the difference from `cut` is that nothing is missing
+   from it. */
+.cv-edge.is-state-standby .cv-edge-line {
+  stroke: var(--line);
+  stroke-opacity: 0.5;
+  stroke-dasharray: 2 4;
+}
+
+.cv-edge.is-state-standby .cv-edge-arrow {
+  fill: var(--line);
+  fill-opacity: 0.45;
+}
+
+/* --------------------------------------------------------------------------
+   CONTROL EDGES
+
+   An autoscaler's wire to its target is a supervisory relationship, not a
+   request path, and a student must never read it as traffic. Three channels
+   say so at once: a long dash, a HOLLOW arrowhead (every request edge has a
+   solid one), and the word "scales" on the wire.
+   -------------------------------------------------------------------------- */
+
+.cv-edge.is-control .cv-edge-line {
+  stroke: var(--kind-autoscaler-stroke);
+  stroke-opacity: 0.75;
+  stroke-dasharray: 6 4;
+}
+
+/* Hollow head. Painted in the page ground with a coloured rim, so it reads as
+   an open arrow against whatever it crosses. */
+.cv-edge.is-control .cv-edge-arrow {
+  fill: var(--bg);
+  fill-opacity: 1;
+  stroke: var(--kind-autoscaler-stroke);
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+}
+
+/* INK, not stroke. The `stroke` role is tuned for a 1.5px outline (~3:1,
+   the AA bar for a graphical object); as text on paper it measures 3.58:1
+   and fails the 4.5:1 body-text bar. `ink` is the per-kind role meant for
+   type and measures 7.48:1 on the same ground. */
+.cv-edge-label.is-control {
+  fill: var(--kind-autoscaler-ink);
+  font-family: var(--sans);
+  font-weight: var(--fw-med);
+  letter-spacing: var(--tr-label);
+}
+
+/* A control edge is never "active": no request crosses it, so it never gets
+   the moving pulses even if some future engine reports a rate on it. */
+.cv-edge.is-control .cv-edge-flow {
+  display: none;
+}
+
+/* --------------------------------------------------------------------------
+   Overlays
+   -------------------------------------------------------------------------- */
+
+/* The first thing a student sees on a cleared canvas, and the one moment
+   they are most likely to be stuck. A heading that names the situation
+   without alarm, one sentence naming the smallest working system, then the
+   starting points (EmptyCanvas.css). */
+.cv-empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(38ch, calc(100% - var(--sp-10)));
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+
+.cv-empty-lead {
+  margin: 0;
+  font-size: var(--fs-num);
+  font-weight: var(--fw-med);
+  line-height: var(--lh-base);
+  color: var(--text-dim);
+}
+
+.cv-empty-body {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-base);
+  line-height: var(--lh-prose);
+  color: var(--text-faint);
+  text-wrap: pretty;
+}
+
+/* Shown only while a click-to-link is armed. Top-center, out of the way of
+   both the ledger and the zoom controls. */
+.cv-hint {
+  position: absolute;
+  /* Below the floating islands, which sit centred at the top of the window
+     and would otherwise cover this exactly. --bar-clear is the one number
+     everything that must clear them reads. */
+  top: var(--bar-clear, 84px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--sp-1) var(--sp-3);
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-md);
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  pointer-events: none;
+}
+
+/* Status ledger. Bottom-left, carrying four true numbers. */
+.cv-ledger {
+  position: absolute;
+  /* Inset past the 32px metrics toggle the shell floats in this corner
+     (.stage-toggle-metrics in App.css), plus the same gap again, so the
+     two never overlap at any strip state. */
+  left: calc(var(--sp-3) + 32px + var(--sp-3));
+  bottom: var(--sp-3);
+  /* The toggle's height, so the two read as one row: the ledger text
+     centres on the button beside it instead of hanging below its middle. */
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  /* The four facts are separated by SPACE, not by punctuation. A `·` glyph
+     between them was a real text node measuring 2.12:1 against the canvas —
+     a WCAG failure carrying no information at all. This gap separates them
+     just as clearly and leaves nothing that can fail. */
+  gap: var(--sp-3);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  color: var(--text-faint);
+  pointer-events: none;
+
+  /* A surface of its own, because this text floats OVER the canvas and a node
+     panned underneath it left both unreadable: two sets of glyphs at similar
+     weight occupying the same pixels. The other floating chrome in this corner
+     (the metrics toggle, the zoom cluster) already sits on --surface, so the
+     ledger was the one overlay asserting it could be read against anything.
+     Padding and radius match the 32px controls beside it so the row reads as
+     one strip rather than a label that happens to be nearby. */
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-btn);
+  background: var(--surface);
+  border: var(--bw) solid var(--border);
+}
+
+/* The elapsed clock. Units print lowercase ("1.5s", "2m 05s"): the ledger's
+   .label uppercase turned the seconds into "1.5S", a unit no book sets. */
+.cv-ledger-time {
+  text-transform: none;
+}
+
+/* The category breakdown drops out well before the phone breakpoint, because
+   it is by far the longest thing in this row and it runs INTO the zoom
+   cluster rather than off the screen.
+
+   Measured in the browser rather than estimated. The widest breakdown any
+   example produces is Discord's "6 traffic, 9 compute, 1 data, 2 stores,
+   2 messaging, 1 control", which takes the ledger to 737px, ending at x=1029.
+   The zoom cluster sits 181px in from the right edge, so the two meet at a
+   viewport of 1210px. 1240 leaves a little room rather than sitting on the
+   number. Above it the row is comfortable at every width up to 2560.
+
+   The totals stay at every size. They are what a reader glances at; the
+   breakdown is the elaboration, so it is the right thing to lose first. */
+@media (max-width: 1240px) {
+  .cv-ledger-groups {
+    display: none;
+  }
+}
+
+/* The contextual hint line: top centre, in the slot the armed-link
+   instruction also uses, so the two never stack. Quiet text straight on the
+   canvas, no border, no surface, no motion — guidance, not chrome.
+   --text-faint measures 5.17:1 on --bg (AA). */
+.cv-hint-idle {
+  position: absolute;
+  /* Below the floating islands, same as .cv-hint above: both are centred at
+     the top of the canvas, which is exactly where the load island sits. */
+  top: var(--bar-clear, 84px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: var(--sp-4);
+  min-height: 32px;
+  align-items: center;
+  white-space: nowrap;
+  pointer-events: none;
+
+  /* Same reasoning as the ledger below: quiet text is still unreadable with a
+     node panned behind it, and this row sits top-centre where nodes pass
+     constantly. The surface is what makes "quiet" survive contact with the
+     diagram; without it the text is only quiet until something moves. */
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-btn);
+  background: var(--surface);
+  border: var(--bw) solid var(--border);
+}
+
+/* --------------------------------------------------------------------------
+   Note format bar.
+
+   Pinned to the bottom of the canvas rather than drawn beside the note it
+   edits. An anchored toolbar is wider than a default note, so it clipped
+   against the right edge of the viewport, and it slid under the reader's
+   hand on every pan. A fixed position can do neither.
+
+   Centred, and inset above the metrics toggle's row so the two never share
+   a line. Chrome, so it carries [data-chrome] and the pointer router leaves
+   it alone.
+   -------------------------------------------------------------------------- */
+
+.cv-format {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--sp-3) + 32px + var(--sp-3));
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1);
+  max-width: calc(100% - var(--sp-5) * 2);
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+}
+
+.cv-format-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* A hairline between groups, so size, face and colour read as three sets
+   rather than one undifferentiated row of buttons. */
+.cv-format-group + .cv-format-group {
+  padding-left: var(--sp-2);
+  border-left: 1px solid var(--border);
+}
+
+.cv-format-btn {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 var(--sp-1);
+}
+
+.cv-format-btn.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.cv-format-bold {
+  font-weight: 700;
+}
+
+.cv-format-italic {
+  font-style: italic;
+}
+
+.cv-format-underline {
+  text-decoration: underline;
+}
+
+/* Each face button is SET in the face it selects, so the row is a specimen
+   rather than five identical letters that have to be learned. */
+.cv-format-btn[data-font-name='hand'] {
+  font-family: var(--hand);
+}
+
+.cv-format-btn[data-font-name='serif'] {
+  font-family: var(--serif);
+}
+
+.cv-format-btn[data-font-name='mono'] {
+  font-family: var(--mono);
+}
+
+.cv-format-tone {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--ann-tone-fill, var(--surface-2));
+  cursor: pointer;
+}
+
+.cv-format-tone:hover {
+  border-color: var(--text-dim);
+}
+
+.cv-format-tone.is-active {
+  border-color: var(--text);
+  border-width: 2px;
+}
+
+.cv-format-tone:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.cv-format-tone[data-tone='0'] {
+  --ann-tone-fill: var(--ann-0-fill);
+  border-color: var(--ann-0-line);
+}
+
+.cv-format-tone[data-tone='1'] {
+  --ann-tone-fill: var(--ann-1-fill);
+  border-color: var(--ann-1-line);
+}
+
+.cv-format-tone[data-tone='2'] {
+  --ann-tone-fill: var(--ann-2-fill);
+  border-color: var(--ann-2-line);
+}
+
+.cv-format-tone[data-tone='3'] {
+  --ann-tone-fill: var(--ann-3-fill);
+  border-color: var(--ann-3-line);
+}
+
+.cv-format-tone[data-tone='4'] {
+  --ann-tone-fill: var(--ann-4-fill);
+  border-color: var(--ann-4-line);
+}
+
+.cv-format-tone[data-tone='5'] {
+  --ann-tone-fill: var(--ann-5-fill);
+  border-color: var(--ann-5-line);
+}
+
+.cv-format-tone[data-tone='6'] {
+  --ann-tone-fill: var(--ann-6-fill);
+  border-color: var(--ann-6-line);
+}
+
+.cv-format-tone[data-tone='7'] {
+  --ann-tone-fill: var(--ann-7-fill);
+  border-color: var(--ann-7-line);
+}
+
+.cv-format-tone[data-tone='8'] {
+  --ann-tone-fill: var(--ann-8-fill);
+  border-color: var(--ann-8-line);
+}
+
+.cv-format-tone[data-tone='9'] {
+  --ann-tone-fill: var(--ann-9-fill);
+  border-color: var(--ann-9-line);
+}
+
+.cv-format-tone[data-tone='10'] {
+  --ann-tone-fill: var(--ann-10-fill);
+  border-color: var(--ann-10-line);
+}
+
+.cv-format-tone[data-tone='11'] {
+  --ann-tone-fill: var(--ann-11-fill);
+  border-color: var(--ann-11-line);
+}
+
+.cv-format-tone[data-tone='12'] {
+  --ann-tone-fill: var(--ann-12-fill);
+  border-color: var(--ann-12-line);
+}
+
+/* "No colour": a slash, because an empty swatch reads as white, which is a
+   colour and not the absence of one. */
+.cv-format-tone-none {
+  background:
+    linear-gradient(
+      to bottom right,
+      transparent calc(50% - 1px),
+      var(--text-faint) calc(50% - 1px),
+      var(--text-faint) calc(50% + 1px),
+      transparent calc(50% + 1px)
+    ),
+    var(--surface);
+}
+
+.cv-zoom {
+  position: absolute;
+  right: var(--sp-3);
+  bottom: var(--sp-3);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-1);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+/* 32px, matching the shared small-button size. These were 24px — below
+   the minimum comfortable hit target, and a size nothing else in the app
+   uses. The overlay is not so cramped that it needed its own scale. */
+.cv-zoom .btn {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 var(--sp-2);
+}
+
+.cv-zoom-level {
+  min-width: 46px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* On a touch-first device (smartboard, tablet) the zoom cluster is the only
+   navigation chrome, pressed at arm's length: 44px is the floor, not the
+   target. min-* rather than fixed sizes so the shared .btn styling keeps
+   governing everything else about the buttons. */
+@media (pointer: coarse) {
+  .cv-zoom .btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Reduced motion
+
+   The dash animation is a live measurement, not decoration, so it degrades to
+   a static dimmed wire rather than simply stopping mid-cycle at an arbitrary
+   dash phase.
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .cv-edge-flow {
+    animation: none;
+    stroke-dasharray: none;
+    stroke-opacity: 0.4;
+  }
+
+  .cv-meter-fill,
+  .cv-node-body,
+  .cv-node-icon,
+  .cv-edge-line,
+  .cv-edge-arrow,
+  .cv-spark,
+  .cv-grid,
+  .cv-port,
+  /* Scaling and backlog transitions. These are short state changes rather
+     than entrance animations, which is why they exist at all — but a reader
+     who has asked for less motion still gets the new value immediately
+     instead of watching it travel there. The information is in the position,
+     never in the movement. */
+  .cv-unit,
+  .cv-vessel-fill,
+  .cv-node-primary .cv-val {
+    transition: none;
+  }
+
+  /* Entrances collapse to appearance-in-place. `animation: none` rather
+     than a shortened duration is safe here, unlike the shell panels: no
+     unmount logic waits on these animationend events. */
+  .cv-node.is-entering,
+  .cv-node-ring,
+  .cv-node-mark {
+    animation: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   In-place rename editor.
+
+   Floated over the node's header row by the world-to-screen transform (the
+   left/top/width/height and font-size all arrive inline, because they scale
+   with the zoom). Styled to read as the node's own name made editable: the
+   node's sans face at the node's weight, a hairline accent border to say
+   "this is now an input", and the node surface behind it so the SVG name
+   underneath never ghosts through.
+   -------------------------------------------------------------------------- */
+
+.cv-rename {
+  position: absolute;
+  z-index: 4;
+  box-sizing: border-box;
+  padding: 0 var(--sp-2);
+  border: var(--bw-strong) solid var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--sans);
+  font-weight: var(--fw-body);
+  line-height: 1;
+  outline: none;
+}
+
+/* ==========================================================================
+   Annotations: sections and notes.
+
+   Sections paint BEHIND the diagram, notes in front of it, and both are
+   documentation: no health colour, no motion, nothing that competes with a
+   live metric. The tone tokens are aliases resolved in index.css; this file
+   only consumes them, and (matching the per-kind rule) the --sec-* locals
+   are declared on the attribute-carrying group with higher specificity than
+   any consumer, so a source-order tie can never grey a tone out.
+   ========================================================================== */
+
+.cv-section[data-tone='0'] {
+  --sec-fill: var(--ann-0-fill);
+  --sec-line: var(--ann-0-line);
+  --sec-ink: var(--ann-0-ink);
+}
+
+.cv-section[data-tone='1'] {
+  --sec-fill: var(--ann-1-fill);
+  --sec-line: var(--ann-1-line);
+  --sec-ink: var(--ann-1-ink);
+}
+
+.cv-section[data-tone='2'] {
+  --sec-fill: var(--ann-2-fill);
+  --sec-line: var(--ann-2-line);
+  --sec-ink: var(--ann-2-ink);
+}
+
+.cv-section[data-tone='3'] {
+  --sec-fill: var(--ann-3-fill);
+  --sec-line: var(--ann-3-line);
+  --sec-ink: var(--ann-3-ink);
+}
+
+.cv-section[data-tone='4'] {
+  --sec-fill: var(--ann-4-fill);
+  --sec-line: var(--ann-4-line);
+  --sec-ink: var(--ann-4-ink);
+}
+
+.cv-section[data-tone='5'] {
+  --sec-fill: var(--ann-5-fill);
+  --sec-line: var(--ann-5-line);
+  --sec-ink: var(--ann-5-ink);
+}
+
+.cv-section[data-tone='6'] {
+  --sec-fill: var(--ann-6-fill);
+  --sec-line: var(--ann-6-line);
+  --sec-ink: var(--ann-6-ink);
+}
+
+.cv-section[data-tone='7'] {
+  --sec-fill: var(--ann-7-fill);
+  --sec-line: var(--ann-7-line);
+  --sec-ink: var(--ann-7-ink);
+}
+
+.cv-section[data-tone='8'] {
+  --sec-fill: var(--ann-8-fill);
+  --sec-line: var(--ann-8-line);
+  --sec-ink: var(--ann-8-ink);
+}
+
+.cv-section[data-tone='9'] {
+  --sec-fill: var(--ann-9-fill);
+  --sec-line: var(--ann-9-line);
+  --sec-ink: var(--ann-9-ink);
+}
+
+.cv-section[data-tone='10'] {
+  --sec-fill: var(--ann-10-fill);
+  --sec-line: var(--ann-10-line);
+  --sec-ink: var(--ann-10-ink);
+}
+
+.cv-section[data-tone='11'] {
+  --sec-fill: var(--ann-11-fill);
+  --sec-line: var(--ann-11-line);
+  --sec-ink: var(--ann-11-ink);
+}
+
+.cv-section[data-tone='12'] {
+  --sec-fill: var(--ann-12-fill);
+  --sec-line: var(--ann-12-line);
+  --sec-ink: var(--ann-12-ink);
+}
+
+/* THE INTERIOR IS GRABBABLE, BUT ONLY WHERE IT IS EMPTY.
+   Sections paint behind everything, so a node, edge or port sitting on top of
+   the frame receives the press first and a section can never make its own
+   contents unclickable. What is left is the empty space between them, and
+   that is exactly the region a person aims at when they mean "this group".
+   Requiring the 1.5px border made the whole frame feel unselectable.
+   The VISIBLE border stays inert; its hit target is .cv-section-hit below,
+   which is a fat invisible stroke reaching outside the frame as well as in. */
+.cv-section-fill {
+  fill: var(--sec-fill, var(--surface-2));
+  fill-opacity: 0.55;
+  pointer-events: fill;
+  cursor: grab;
+}
+
+.cv-section-line {
+  fill: none;
+  stroke: var(--sec-line, var(--border-strong));
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.cv-section.is-selected .cv-section-line {
+  stroke-width: 2;
+}
+
+/* A node is being dragged over this frame and will land inside it.
+   The border goes solid and heavy and the tint deepens, so the answer to
+   "which group am I about to join" is visible BEFORE the drop rather than
+   discovered after it. Distinct from selection: selection is a thinner ring
+   on a calm fill, this is the whole frame leaning forward.
+   Only stroke-width and opacity animate, both compositor-friendly, because
+   this runs on every frame of a drag. */
+.cv-section.is-drop-target .cv-section-line {
+  stroke-width: 3;
+  stroke-dasharray: none;
+}
+
+.cv-section.is-drop-target .cv-section-fill {
+  fill-opacity: 0.9;
+}
+
+.cv-section-line,
+.cv-section-fill {
+  transition:
+    stroke-width var(--dur-fast) var(--ease),
+    fill-opacity var(--dur-fast) var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cv-section-line,
+  .cv-section-fill {
+    transition: none;
+  }
+}
+
+/* The border's real target: an invisible 16px stroke, pointer-events:stroke
+   so ONLY the perimeter band takes the pointer and the fill it encloses
+   stays transparent to clicks. Same pattern as .cv-edge-hit. */
+.cv-section-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 16;
+  pointer-events: stroke;
+  cursor: grab;
+}
+
+/* Label plate, top-left. Solid enough to grab, quiet enough to read as part
+   of the frame. The text itself is inert; the plate carries the hit. */
+.cv-section-label-bg {
+  fill: var(--sec-fill, var(--surface-2));
+  pointer-events: all;
+  cursor: grab;
+}
+
+.cv-section-label-text {
+  fill: var(--sec-ink, var(--text-dim));
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-med);
+  dominant-baseline: central;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Live draw preview for the armed section tool. */
+.cv-section-draft {
+  fill: var(--accent);
+  fill-opacity: 0.06;
+  stroke: var(--accent);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   Notes
+   -------------------------------------------------------------------------- */
+
+.cv-note-hit {
+  fill: transparent;
+  pointer-events: all;
+  cursor: grab;
+}
+
+.cv-note-text {
+  /* currentColor, not the token directly: the group carries `color` when the
+     note has been given an explicit colour, and inherits the token when it
+     has not. One declaration serves both without a second rule. */
+  color: var(--text);
+  fill: currentcolor;
+  font-family: var(--sans);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* The annotation faces. A hand-drawn face reads as a margin note rather than
+   as part of the diagram, which is the whole reason for offering it. Every
+   family here must also exist in textMetrics' STACKS, or the note will be
+   measured in one face and painted in another and the wrap will be wrong. */
+.cv-note[data-font='hand'] .cv-note-text {
+  font-family: var(--hand);
+}
+
+.cv-note[data-font='serif'] .cv-note-text {
+  font-family: var(--serif);
+}
+
+.cv-note[data-font='mono'] .cv-note-text {
+  font-family: var(--mono);
+}
+
+/* The three scales. Sizes and weights MUST match NOTE_SIZES in
+   annotationLayout.ts, which is what the wrap measurement and the in-place
+   editor both use; a drift here would wrap the text against one font and
+   paint it in another. */
+.cv-note.is-sm .cv-note-text {
+  font-size: 12px;
+  font-weight: 450;
+  /* Dims via `color` rather than `fill`, so an explicit colour on the group
+     still wins. Setting fill here would override currentColor and make a
+     small note the one size that ignores its own colour. */
+  color: var(--text-dim);
+}
+
+.cv-note.is-md .cv-note-text {
+  font-size: 16px;
+  font-weight: 450;
+}
+
+.cv-note.is-lg .cv-note-text {
+  font-size: 24px;
+  font-weight: 550;
+}
+
+/* --------------------------------------------------------------------------
+   Annotation selection chrome: ring, resize handles, note size switch.
+   Geometry arrives in screen-constant units from the component (divided by
+   the zoom), so nothing here needs vector-effect except the ring stroke.
+   -------------------------------------------------------------------------- */
+
+.cv-ann-ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.cv-handle {
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.cv-handle-hit {
+  fill: transparent;
+  pointer-events: all;
+}
+
+.cv-handle-hit[data-dir='n'],
+.cv-handle-hit[data-dir='s'] {
+  cursor: ns-resize;
+}
+
+.cv-handle-hit[data-dir='e'],
+.cv-handle-hit[data-dir='w'] {
+  cursor: ew-resize;
+}
+
+.cv-handle-hit[data-dir='nw'],
+.cv-handle-hit[data-dir='se'] {
+  cursor: nwse-resize;
+}
+
+/* A note's frame is a hairline with square corners, Eraser's text box: its
+   corner handles are the only visible ones (the edges are cursor-only
+   strips), so nothing here needs a second shape to tell two handle kinds
+   apart. */
+.cv-ann-ring.is-note,
+.cv-ann-sel .cv-handle.is-corner {
+  stroke-width: 1;
+  /* A hairline lands on a half pixel at most zooms and antialiases into a
+     two-pixel smear; snapping it to the grid is what keeps it a line. */
+  shape-rendering: crispEdges;
+}
+
+.cv-handle-hit[data-dir='ne'],
+.cv-handle-hit[data-dir='sw'] {
+  cursor: nesw-resize;
+}
+
+/* Shade swatches under a selected section. Each paints its own tone's fill
+   and border, so the row is a preview of the result rather than a legend
+   that has to be learned. Screen-constant like every other piece of
+   selection chrome: the geometry arrives already divided by the zoom. */
+.cv-sec-tone {
+  cursor: pointer;
+  stroke-width: 1;
+}
+
+.cv-sec-tone[data-tone='0'] {
+  fill: var(--ann-0-fill);
+  stroke: var(--ann-0-line);
+}
+
+.cv-sec-tone[data-tone='1'] {
+  fill: var(--ann-1-fill);
+  stroke: var(--ann-1-line);
+}
+
+.cv-sec-tone[data-tone='2'] {
+  fill: var(--ann-2-fill);
+  stroke: var(--ann-2-line);
+}
+
+.cv-sec-tone[data-tone='3'] {
+  fill: var(--ann-3-fill);
+  stroke: var(--ann-3-line);
+}
+
+.cv-sec-tone[data-tone='4'] {
+  fill: var(--ann-4-fill);
+  stroke: var(--ann-4-line);
+}
+
+.cv-sec-tone[data-tone='5'] {
+  fill: var(--ann-5-fill);
+  stroke: var(--ann-5-line);
+}
+
+.cv-sec-tone[data-tone='6'] {
+  fill: var(--ann-6-fill);
+  stroke: var(--ann-6-line);
+}
+
+.cv-sec-tone[data-tone='7'] {
+  fill: var(--ann-7-fill);
+  stroke: var(--ann-7-line);
+}
+
+.cv-sec-tone[data-tone='8'] {
+  fill: var(--ann-8-fill);
+  stroke: var(--ann-8-line);
+}
+
+.cv-sec-tone[data-tone='9'] {
+  fill: var(--ann-9-fill);
+  stroke: var(--ann-9-line);
+}
+
+.cv-sec-tone[data-tone='10'] {
+  fill: var(--ann-10-fill);
+  stroke: var(--ann-10-line);
+}
+
+.cv-sec-tone[data-tone='11'] {
+  fill: var(--ann-11-fill);
+  stroke: var(--ann-11-line);
+}
+
+.cv-sec-tone[data-tone='12'] {
+  fill: var(--ann-12-fill);
+  stroke: var(--ann-12-line);
+}
+
+/* The chosen one, marked with its own ink so the cue survives a theme
+   switch along with the shade it marks. */
+.cv-sec-tone.is-active {
+  stroke: var(--text);
+  stroke-width: 2.5;
+}
+
+.cv-sec-tone:hover {
+  stroke-width: 2;
+}
+
+/* A note's text colour, when it has been given one. Indices resolve through
+   the same --ann-* aliases the sections use, so a colour picked in the light
+   theme is the dark theme's version of that colour after a switch. */
+.cv-note[data-tone='0'] .cv-note-text,
+.cv-note-editor[data-tone='0'] {
+  color: var(--ann-0-ink);
+}
+
+.cv-note[data-tone='1'] .cv-note-text,
+.cv-note-editor[data-tone='1'] {
+  color: var(--ann-1-ink);
+}
+
+.cv-note[data-tone='2'] .cv-note-text,
+.cv-note-editor[data-tone='2'] {
+  color: var(--ann-2-ink);
+}
+
+.cv-note[data-tone='3'] .cv-note-text,
+.cv-note-editor[data-tone='3'] {
+  color: var(--ann-3-ink);
+}
+
+.cv-note[data-tone='4'] .cv-note-text,
+.cv-note-editor[data-tone='4'] {
+  color: var(--ann-4-ink);
+}
+
+.cv-note[data-tone='5'] .cv-note-text,
+.cv-note-editor[data-tone='5'] {
+  color: var(--ann-5-ink);
+}
+
+.cv-note[data-tone='6'] .cv-note-text,
+.cv-note-editor[data-tone='6'] {
+  color: var(--ann-6-ink);
+}
+
+.cv-note[data-tone='7'] .cv-note-text,
+.cv-note-editor[data-tone='7'] {
+  color: var(--ann-7-ink);
+}
+
+.cv-note[data-tone='8'] .cv-note-text,
+.cv-note-editor[data-tone='8'] {
+  color: var(--ann-8-ink);
+}
+
+.cv-note[data-tone='9'] .cv-note-text,
+.cv-note-editor[data-tone='9'] {
+  color: var(--ann-9-ink);
+}
+
+.cv-note[data-tone='10'] .cv-note-text,
+.cv-note-editor[data-tone='10'] {
+  color: var(--ann-10-ink);
+}
+
+.cv-note[data-tone='11'] .cv-note-text,
+.cv-note-editor[data-tone='11'] {
+  color: var(--ann-11-ink);
+}
+
+.cv-note[data-tone='12'] .cv-note-text,
+.cv-note-editor[data-tone='12'] {
+  color: var(--ann-12-ink);
+}
+
+/* Bold. Set here as well as in the measurement, or the paint and the wrap
+   disagree and the text overruns the box it was wrapped to. */
+.cv-note.is-bold .cv-note-text {
+  font-weight: 700;
+}
+
+.cv-note.is-italic .cv-note-text {
+  font-style: italic;
+}
+
+/* text-decoration on an SVG <text> is inherited by its tspans, which is what
+   puts the rule under every wrapped line rather than only the first. */
+.cv-note.is-underline .cv-note-text {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+/* Each face button is SET in the face it selects, so the row is a specimen
+   rather than five identical letters that have to be learned. */
+.cv-note-size [data-font-name='hand'] text {
+  font-family: var(--hand);
+}
+
+.cv-note-size [data-font-name='serif'] text {
+  font-family: var(--serif);
+}
+
+.cv-note-size [data-font-name='mono'] text {
+  font-family: var(--mono);
+}
+
+/* The "no colour" button: a slash over an empty swatch. */
+.cv-note-clear rect {
+  fill: var(--surface);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  cursor: pointer;
+}
+
+.cv-note-clear path {
+  stroke: var(--text-faint);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.cv-note-clear.is-active rect {
+  stroke: var(--text);
+  stroke-width: 2.5;
+}
+
+.cv-note-size rect {
+  fill: var(--surface);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+}
+
+.cv-note-size text {
+  fill: var(--text-dim);
+  font-family: var(--sans);
+  font-weight: var(--fw-med);
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+  user-select: none;
+}
+
+.cv-note-size .is-active rect {
+  fill: var(--accent-soft);
+  stroke: var(--accent);
+}
+
+.cv-note-size .is-active text {
+  fill: var(--accent-ink);
+}
+
+/* --------------------------------------------------------------------------
+   In-place annotation editors. Siblings of the surface, like the rename
+   input, so the pointer router never sees them.
+
+   The note editor is Excalidraw's textWysiwyg (textWysiwyg.ts): a textarea
+   the editor creates and styles inline to nothing at all, no border, no
+   background, no padding, no outline, no resize grip, laid out in scene px
+   and scaled to the zoom with a transform. What the stylesheet adds is only
+   what the painted note also takes from the stylesheet: face, weight, slant,
+   underline and colour, through the same attribute and class rules
+   .cv-note-text uses (they share selectors below), so the editor and the
+   paint cannot drift apart.
+   -------------------------------------------------------------------------- */
+
+.cv-text-editor-container {
+  /* Nothing of its own; the textarea inside is absolutely positioned
+     against the host, exactly as Excalidraw's container is. */
+  display: contents;
+}
+
+.cv-note-editor {
+  color: var(--text);
+  caret-color: currentcolor;
+  font-family: var(--sans);
+  /* The browser's own stylesheet resets these on a textarea (letter-spacing
+     and word-spacing to normal, text-rendering to auto), while the SVG text
+     inherits the body's tracking and optimizeLegibility. Inherit them here
+     too, or the editor kerns and tracks its glyphs a fraction of a pixel
+     differently from the paint, which reads as a slightly different font. */
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  text-rendering: inherit;
+  text-transform: inherit;
+  text-indent: inherit;
+}
+
+.cv-note-editor::selection {
+  background: var(--accent-ring);
+}
+
+.cv-note-editor[data-font='hand'] {
+  font-family: var(--hand);
+}
+
+.cv-note-editor[data-font='serif'] {
+  font-family: var(--serif);
+}
+
+.cv-note-editor[data-font='mono'] {
+  font-family: var(--mono);
+}
+
+/* Mirrors .cv-note.is-sm .cv-note-text: a small note is dimmed, and the
+   editor must be too, or the note brightens for as long as the caret is in
+   it. Guarded on the tone attribute rather than relying on source order
+   (the tone rules sit above this one) so a coloured small note keeps its
+   colour, as it does on the painted note. */
+.cv-note-editor.is-sm:not([data-tone]) {
+  color: var(--text-dim);
+}
+
+.cv-note-editor.is-italic {
+  font-style: italic;
+}
+
+.cv-note-editor.is-underline {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+/* The frame around a note being edited: the selection ring's hairline,
+   square corners, no handles. */
+.cv-text-box {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  shape-rendering: crispEdges;
+  pointer-events: none;
+}
+
+.cv-label-editor {
+  position: absolute;
+  z-index: 4;
+  box-sizing: border-box;
+  padding: 0 var(--sp-2);
+  border: var(--bw-strong) solid var(--accent);
+  border-radius: var(--r-sm);
+  /* The label plate it covers is a tinted pill, so this keeps a surface of
+     its own; unlike a note, there is no plain canvas to blend into. */
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--sans);
+  font-weight: var(--fw-med);
+  line-height: 1;
+  outline: none;
+}
+
+/* --------------------------------------------------------------------------
+   Phone.
+
+   Two pieces of canvas chrome stop making sense at this width. The idle hint
+   teaches mouse gestures, "Scroll to pan", "Ctrl+scroll to zoom",
+   "Shift+drag to select", none of which a finger can perform; it is also
+   nowrap and 425px wide, so on a 390px screen it ran off both edges at once.
+   Touch has its own vocabulary and the canvas already implements it, so the
+   honest move is to say nothing rather than to say the wrong thing.
+
+   The ledger keeps its counts but drops the elapsed clock: three facts do
+   not fit, and how long the simulation has run is the one a reader can also
+   get from watching it.
+   -------------------------------------------------------------------------- */
+
+/* --------------------------------------------------------------------------
+   Touch: the browser must not claim a press the canvas needs.
+
+   `touch-action: none` on the surface stops scroll and pinch from stealing
+   the gesture, but on a phone a press held on an element ALSO starts the
+   platform's own long-press: the callout menu on iOS, text selection and the
+   context menu on Android. Both fire pointercancel at the canvas, which drops
+   the drag exactly as a reader settles their finger to move a node. Holding a
+   node opened the inspector instead of dragging it, because the tap survived
+   and the drag did not.
+
+   These three properties turn that off. -webkit-touch-callout is the iOS
+   half, user-select the selection half; the context menu is already
+   preventDefault'd in the handler, which only works once the selection
+   gesture is not competing with it.
+   -------------------------------------------------------------------------- */
+
+.cv-surface,
+.cv-node,
+.cv-node * {
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The nodes are the drag targets, so they must not hand the press to the
+   browser's scroller either. The surface already declares this; the nodes
+   inherit `auto` without it and a touch that lands ON a node was the case
+   that failed. */
+.cv-node {
+  touch-action: none;
+}
+
+@media (max-width: 720px) {
+  .cv-hint-idle {
+    display: none;
+  }
+
+  .cv-ledger {
+    gap: var(--sp-3);
+  }
+
+  .cv-ledger-time {
+    display: none;
+  }
+}
+
+/* A coarse pointer means the mouse hints are wrong whatever the window size:
+   a tablet in landscape is past the width breakpoint and still has no
+   scroll wheel. */
+@media (pointer: coarse) {
+  .cv-hint-idle {
+    display: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   "Can you break it?" marks.
+
+   A dashed ring around a part the search is faulting now, and a numbered
+   badge on each fault of a break it found. Danger, because these are the
+   parts that fail; dashed and numbered, so neither is colour alone.
+   -------------------------------------------------------------------------- */
+.cv-break-ring {
+  fill: none;
+  stroke: var(--danger-mark);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  pointer-events: none;
+}
+
+.cv-break-wire {
+  fill: none;
+  stroke: var(--danger-mark);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  pointer-events: none;
+}
+
+.cv-break-badge {
+  pointer-events: none;
+}
+
+.cv-break-badge circle {
+  fill: var(--danger);
+}
+
+.cv-break-badge text {
+  fill: var(--surface);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-anchor: middle;
+}
