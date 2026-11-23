@@ -22,9 +22,9 @@ import './widget.css';
  * bigger" starts from what the user is looking at.
  */
 
-const SESSION_KEY = 'breakscale.session.v1';
-const PREFS_KEY = 'breakscale.preferences.v1';
-const LAYOUT_KEY = 'breakscale.layout.v1';
+const SESSION_KEY = 'archisys.session.v1';
+const PREFS_KEY = 'archisys.preferences.v1';
+const LAYOUT_KEY = 'archisys.layout.v1';
 /** Dragging a node writes on every frame; the model needs the result, not the path. */
 const SYNC_DELAY_MS = 1500;
 
@@ -33,7 +33,7 @@ interface ViewData {
   name: string | null;
 }
 
-const host = new Host({ name: 'Breakscale', version: '0.1.0' }, {});
+const host = new Host({ name: 'archisys', version: '0.1.0' }, {});
 
 function applyContext(ctx: McpUiHostContext | undefined): void {
   const mode = ctx?.displayMode ?? 'inline';
@@ -70,7 +70,7 @@ function mountExpand(): void {
     void host
       .requestDisplayMode({ mode: 'fullscreen' })
       .then(() => applyContext(host.getHostContext()))
-      .catch(() => {});
+      .catch(() => { });
   });
   island.append(button);
   document.body.append(island);
@@ -135,12 +135,12 @@ function installStorage(seed: Record<string, string>, initial: Topology): void {
           {
             type: 'text',
             text:
-              'The user edited the design on the Breakscale canvas. This is the current design; ' +
+              'The user edited the design on the Archisys canvas. This is the current design; ' +
               `start from it for any change:\n${body}`,
           },
         ],
       })
-      .catch(() => {});
+      .catch(() => { });
   };
 
   const shim: Storage = {

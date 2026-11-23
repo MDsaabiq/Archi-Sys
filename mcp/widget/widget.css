@@ -17,7 +17,7 @@ html[data-display='fullscreen'] body {
   height: 100vh;
 }
 
-#root > .app {
+#root>.app {
   height: 100%;
 }
 
@@ -29,7 +29,7 @@ html[data-display='fullscreen'] body {
  * its run buttons slide under the menu island. Three things a chat does not
  * need there go, and the load control gets the room: the GitHub link and
  * Share (the assistant has already given the link to the design), and the
- * wordmark (the host's own frame header names Breakscale right above it).
+ * wordmark (the host's own frame header names Archisys right above it).
  * Fullscreen has the width for everything and keeps all three.
  */
 html:not([data-display='fullscreen']) .app-source-link,

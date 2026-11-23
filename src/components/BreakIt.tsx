@@ -21,7 +21,7 @@ import './Challenge.css';
 import './BreakIt.css';
 
 /**
- * "Can you break it?": pick what has to hold, and Breakscale throws faults
+ * "Can you break it?": pick what has to hold, and Archisys throws faults
  * at the design until it gives way or runs out of tries.
  *
  * Docks where a brief does and uses its panel, sheet on a phone included,

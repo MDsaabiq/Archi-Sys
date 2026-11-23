@@ -1,7 +1,7 @@
 import { createHttpApp } from './app';
 
 /*
- * The hosted server at mcp.breakscale.tech, as a Vercel function.
+ * The hosted server as a Vercel function.
  * `api/mcp.js` re-exports this bundle; an Express app is a plain
  * (req, res) handler, which is what the Node runtime calls.
  *

@@ -4,9 +4,9 @@
   width="1280"
   height="300"
   role="img"
-  aria-label="Breakscale: build a system, load it until it breaks, and watch why"
+  aria-label="Archisys: build a system, load it until it breaks, and watch why"
 >
-  <title>Breakscale</title>
+  <title>Archisys</title>
   <!-- The README banner. Same nodes as the social card, same anatomy as the
        canvas, at banner proportions. See public/og.svg for the reasoning. -->
   <rect width="1280" height="300" fill="#151419"/>
@@ -22,7 +22,7 @@
     <circle cx="24.5" cy="16" r="8" fill="#151419"/>
     <circle cx="24.5" cy="16" r="6" fill="#f0656a"/>
   </g>
-  <text x="88" y="104" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace" font-size="58" font-weight="700" letter-spacing="-1.3" fill="#f3f1f5">Breakscale</text>
+  <text x="88" y="104" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace" font-size="58" font-weight="700" letter-spacing="-1.3" fill="#f3f1f5">Archisys</text>
   <text x="90" y="142" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="23" fill="#a5a1b0">Build a system. Load it until it breaks. Watch why.</text>
 <g transform="translate(292, 176)">
     <path d="M184 44 H266" stroke="#4a4856" stroke-width="2"/>

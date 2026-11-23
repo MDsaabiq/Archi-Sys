@@ -124,30 +124,30 @@ export function renderPrivacyPage(): string {
       <h2>The MCP server</h2>
       <ul>
         <li>
-          When your assistant calls a Breakscale tool, it sends the design:
+          When your assistant calls an Archisys tool, it sends the design:
           its components, their settings and how they connect. The server
           checks it, simulates it in memory and sends back the result. The
-          design is not stored or logged by Breakscale, and it is gone when
+          design is not stored or logged by Archisys, and it is gone when
           the request finishes.
         </li>
         <li>
-          The hosted server at <code>mcp.breakscale.tech</code> runs on Vercel,
+          The hosted server at <code>mcp.archisys.dev</code> runs on Vercel,
           which keeps short-lived request logs, such as the time, path and
           status of each request, to operate the service.
         </li>
         <li>
           If you ask it to open a short share link, it fetches the encrypted
-          design from <code>links.breakscale.tech</code> and decrypts it in
+          design from <code>links.archisys.dev</code> and decrypts it in
           memory with the key in the link you gave it.
         </li>
         <li>
-          Run from npm with <code>npx breakscale-mcp</code>, the server works
+          Run from npm with <code>npx archisys-mcp</code>, the server works
           entirely on your machine, and nothing leaves it except that same
           short-link fetch.
         </li>
         <li>
           Your conversation with the assistant is handled by the company that
-          provides it, under its own privacy policy. Breakscale only receives
+          provides it, under its own privacy policy. Archisys only receives
           the tool calls.
         </li>
       </ul>

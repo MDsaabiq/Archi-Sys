@@ -27,9 +27,9 @@ describe('buildTopology', () => {
     expect(r.topology.edges.map((e) => e.id)).toEqual(['users->api', 'api->db']);
   });
 
-  it('accepts every example as a .breakscale file, unchanged', () => {
+  it('accepts every example as a .archisys file, unchanged', () => {
     for (const p of PRESETS) {
-      const r = buildTopology({ app: 'breakscale', version: 1, topology: p.topology });
+      const r = buildTopology({ app: 'archisys', version: 1, topology: p.topology });
       if (!r.ok) throw new Error(`${p.id}: ${r.errors.join('; ')}`);
       expect(r.topology.nodes).toEqual(p.topology.nodes);
       expect(r.topology.edges).toEqual(p.topology.edges);

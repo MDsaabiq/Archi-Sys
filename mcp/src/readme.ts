@@ -84,11 +84,11 @@ export function buildReadme(fieldDocs: Readonly<Record<string, string>>): string
     .map(([f, d]) => `- \`${f}\`: ${d}`)
     .join('\n');
 
-  return `# Breakscale design format
+  return `# Archisys design format
 
 You only need to read this once per conversation. Then call create_view.
 
-Breakscale is a system design simulator. A design is a graph of components.
+Archisys is a system design simulator. A design is a graph of components.
 Traffic starts at \`client\` nodes and flows along edges; every component
 has a finite number of request slots and a queue, so load you add shows up
 as real queueing, latency and failures, measured from simulated requests.
@@ -121,7 +121,7 @@ as real queueing, latency and failures, measured from simulated requests.
 - An edge is a request path \`{ "from", "to" }\`. \`weight\` (default 1)
   splits traffic when a node picks one edge out of several. \`lossRate\`
   (0 to 1, default 0) drops that share of the requests crossing it.
-- A whole \`.breakscale\` file is also accepted as is.
+- A whole \`.archisys\` file is also accepted as is.
 
 ## How requests move
 
@@ -282,10 +282,10 @@ tells its story: each call, timeout, retry and charge, with its time.
 
 ## Saving to a file
 
-A \`.breakscale\` file can be opened in the Breakscale app and in its VS
+A \`.archisys\` file can be opened in the Archisys app and in its VS
 Code extension, from Settings, Open a file. Do not write one by hand: it
 needs every node's position and full config, which the short form leaves
 out. Call export_design with the same design you gave create_view, and
-write what it returns to a file ending in \`.breakscale\`.
+write what it returns to a file ending in \`.archisys\`.
 `;
 }

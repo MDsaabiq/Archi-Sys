@@ -29,7 +29,7 @@ import { defaultLabel, suggestKind } from './kinds';
  *
  * The input is deliberately smaller than a saved topology. A node needs
  * an id and a kind; everything else has a default. That is what makes
- * "draw me a rate limiter" one short call, and a full `.breakscale` file
+ * "draw me a rate limiter" one short call, and a full `.archisys` file
  * is still accepted as is, because it is the same shape with every
  * optional field filled in.
  * ------------------------------------------------------------------ */
@@ -80,7 +80,7 @@ function suggest(word: string, known: readonly string[]): string | null {
 
 /**
  * Validate and expand a design. Accepts the short form (`{ nodes, edges }`)
- * or a whole `.breakscale` file, which carries the same thing under
+ * or a whole `.archisys` file, which carries the same thing under
  * `topology`.
  */
 export function buildTopology(input: unknown): DesignResult {

@@ -21,7 +21,7 @@ import { SITE_ORIGIN } from './tools/site.ts';
 function staticPage(name: string, render: () => string): Plugin {
   const route = `/${name}`;
   return {
-    name: `breakscale-${name}-page`,
+    name: `archisys-${name}-page`,
     apply: () => true,
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
@@ -65,7 +65,7 @@ function siteOrigin(): Plugin {
     SITE_ORIGIN === PLACEHOLDER ? text : text.split(PLACEHOLDER).join(SITE_ORIGIN);
 
   return {
-    name: 'breakscale-site-origin',
+    name: 'archisys-site-origin',
     apply: 'build',
     transformIndexHtml: swap,
     generateBundle(_options, bundle) {
