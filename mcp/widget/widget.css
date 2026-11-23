@@ -1,0 +1,71 @@
+/*
+ * Sizing inside a chat.
+ *
+ * The app fills its viewport, and a host sizes the iframe from the page's
+ * own height, so left alone each waits on the other and the view settles
+ * at whatever height the host started with. Inline, the page gets a
+ * height of its own; in fullscreen the host decides and the app fills it.
+ *
+ * On body, not html: the SDK measures by setting html to max-content for
+ * a frame, which would override a height set there.
+ */
+html body {
+  height: 620px;
+}
+
+html[data-display='fullscreen'] body {
+  height: 100vh;
+}
+
+#root > .app {
+  height: 100%;
+}
+
+/*
+ * The top bar in a chat column.
+ *
+ * Inline, the view is about 750px wide on any screen, which is below the
+ * width the bar's three islands need: the load control is squeezed until
+ * its run buttons slide under the menu island. Three things a chat does not
+ * need there go, and the load control gets the room: the GitHub link and
+ * Share (the assistant has already given the link to the design), and the
+ * wordmark (the host's own frame header names Breakscale right above it).
+ * Fullscreen has the width for everything and keeps all three.
+ */
+html:not([data-display='fullscreen']) .app-source-link,
+html:not([data-display='fullscreen']) .app-share-btn,
+html:not([data-display='fullscreen']) .app-brand {
+  display: none;
+}
+
+/*
+ * The full screen button, where the host offers full screen. It takes the
+ * top-left slot of the undo and redo island inline, as an island of the same
+ * family, and the bar starts after it. Full screen gives the slot back.
+ */
+/* Two gaps in, not one: at chat widths (<=1000px) the bar carries a
+   padding of --sp-3 inside its own --sp-3 offset (App.css), so that is
+   where its islands actually start, and this one has to line up with them. */
+.view-expand {
+  position: fixed;
+  top: calc(var(--sp-3) * 2);
+  left: calc(var(--sp-3) * 2);
+  z-index: 41;
+}
+
+html[data-can-expand]:not([data-display='fullscreen']) .app-island-brand {
+  display: none;
+}
+
+html[data-can-expand]:not([data-display='fullscreen']) .app-bar {
+  left: calc(var(--sp-3) * 2 + 56px);
+}
+
+html[data-display='fullscreen'] .view-expand {
+  display: none;
+}
+
+.view-error {
+  padding: var(--sp-4);
+  color: var(--danger);
+}

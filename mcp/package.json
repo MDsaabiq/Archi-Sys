@@ -1,0 +1,40 @@
+{
+  "name": "archisys-mcp",
+  "version": "0.1.0",
+  "description": "Archisys as an MCP server: an AI assistant builds a system design, runs it through a real discrete-event simulation, and shows it on a live canvas",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "archisys-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist/index.js"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "vite build && tsx scripts/readme.ts && esbuild src/main.ts --bundle --platform=node --target=node20 --format=esm --packages=external --outfile=dist/index.js --banner:js=\"#!/usr/bin/env node\" --loader:.md=text --loader:.html=text",
+    "serve": "node dist/index.js",
+    "serve:stdio": "node dist/index.js --stdio",
+    "typecheck": "tsc --noEmit -p .",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.1.0",
+    "@modelcontextprotocol/express": "^2.0.1",
+    "@modelcontextprotocol/ext-apps": "^2.0.0",
+    "@modelcontextprotocol/node": "^2.1.0",
+    "@modelcontextprotocol/server": "^2.1.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@vitejs/plugin-react": "^6.1.1",
+    "cors": "^2.8.6",
+    "esbuild": "^0.28.2",
+    "express": "^5.2.1",
+    "tsx": "^4.23.15",
+    "vite": "^8.2.2",
+    "vite-plugin-singlefile": "^2.3.3",
+    "zod": "^4.6.5"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "cd .. && bun install --frozen-lockfile && cd mcp && bun install --frozen-lockfile",
+  "buildCommand": "bun run build",
+  "outputDirectory": "public",
+  "rewrites": [
+    {
+      "source": "/mcp",
+      "destination": "/api/mcp"
+    }
+  ]
+}

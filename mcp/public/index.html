@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Breakscale MCP server</title>
+    <meta
+      name="description"
+      content="Breakscale as an MCP server: an AI assistant builds a system design, runs it through a real simulation, and shows it on a live canvas."
+    />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #faf7f3;
+        --text: #1e242e;
+        --dim: #525862;
+        --accent: #325cbd;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #16151a;
+          --text: #eceaf2;
+          --dim: #a8a5b4;
+          --accent: #6f9bf0;
+        }
+      }
+      body {
+        margin: 0;
+        padding: 2.5rem 1.25rem;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          16px/1.65 ui-sans-serif,
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+      }
+      main {
+        max-width: 40rem;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 1.6rem;
+        margin: 0 0 0.5rem;
+      }
+      p {
+        margin: 0 0 1rem;
+        color: var(--dim);
+      }
+      code {
+        color: var(--text);
+      }
+      a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Breakscale MCP server</h1>
+      <p>
+        Add <code>https://mcp.breakscale.tech/mcp</code> to your AI assistant and it can
+        build system designs, run them through a real simulation, and show them on a
+        live canvas.
+      </p>
+      <p>
+        <a href="https://github.com/workersio/breakscale/tree/main/mcp">Setup guide</a>
+        · <a href="https://breakscale.tech">Breakscale</a> ·
+        <a href="https://breakscale.tech/privacy">Privacy</a>
+      </p>
+    </main>
+  </body>
+</html>
