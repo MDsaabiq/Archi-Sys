@@ -14,7 +14,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "vite build && tsx scripts/readme.ts && esbuild src/main.ts --bundle --platform=node --target=node20 --format=esm --packages=external --outfile=dist/index.js --banner:js=\"#!/usr/bin/env node\" --loader:.md=text --loader:.html=text",
+    "build": "vite build && tsx scripts/readme.ts && esbuild src/main.ts --bundle --platform=node --target=node20 --format=esm --packages=external --outfile=dist/index.js --banner:js=\"#!/usr/bin/env node\" --loader:.md=text --loader:.html=text && esbuild src/vercel.ts --bundle --platform=node --target=node20 --format=esm --packages=external --outfile=dist/vercel.js --loader:.md=text --loader:.html=text",
     "serve": "node dist/index.js",
     "serve:stdio": "node dist/index.js --stdio",
     "typecheck": "tsc --noEmit -p .",

@@ -2,7 +2,6 @@ import { createMcpExpressApp } from '@modelcontextprotocol/express';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import cors from 'cors';
 import type { Express, Request, Response } from 'express';
-import type { BreakLimits } from './breakIt';
 import { createServer } from './server';
 
 export interface HttpOptions {
@@ -12,8 +11,6 @@ export interface HttpOptions {
   allowedHosts?: string[];
   /** Wall-clock ceiling for one design's simulation, in ms. */
   budgetMs?: number;
-  /** How much one break_it call may search. */
-  breakLimits?: BreakLimits;
 }
 
 /**
@@ -27,13 +24,12 @@ export function createHttpApp({
   host,
   allowedHosts,
   budgetMs,
-  breakLimits,
 }: HttpOptions): Express {
   const app = createMcpExpressApp({ host, ...(allowedHosts ? { allowedHosts } : {}) });
   app.use(cors());
 
   app.all(['/mcp', '/api/mcp'], async (req: Request, res: Response) => {
-    const server = createServer({ budgetMs, ...(breakLimits ? { breakLimits } : {}) });
+    const server = createServer({ budgetMs });
     const transport = new NodeStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
     });
